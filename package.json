@@ -1,6 +1,6 @@
 {
   "name": "enot",
-	"version": "0.1.22",
+	"version": "0.1.23",
   "description": "Enot: personal API key for voice capture into an Obsidian vault. Paid cloud processing after a 7-day trial.",
   "main": "main.js",
   "scripts": {

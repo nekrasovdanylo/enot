@@ -79,9 +79,10 @@ export function normalizeWriteTargets(raw: unknown): WriteTargets {
 	if (!raw || typeof raw !== "object") {
 		return out;
 	}
+	const obj = raw as Record<string, unknown>;
 	for (const key of Object.keys(DEFAULT_WRITE_TARGETS) as WriteTargetKey[]) {
-		if (key in (raw as object)) {
-			out[key] = Boolean((raw as Record<string, unknown>)[key]);
+		if (key in obj) {
+			out[key] = Boolean(obj[key]);
 		}
 	}
 	if (!NOTE_KIND_FALLBACK.some((k) => out[k])) {

@@ -44,7 +44,7 @@ export function isUnknownSpeakerName(name: string): boolean {
 export function parseNameHintList(text: string): string[] {
 	const names: string[] = [];
 	const seen = new Set<string>();
-	const re = /^[\s>*\-]*\s*\[\[([^\]]+)\]\]\s*$/gm;
+	const re = /^[\s>*-]*\s*\[\[([^\]]+)\]\]\s*$/gm;
 	let m: RegExpExecArray | null;
 	while ((m = re.exec(text || "")) !== null) {
 		const label = (m[1] || "").trim();
@@ -332,17 +332,19 @@ export class VoiceCalibrationModal extends Modal {
 					text: "▶ Play",
 					attr: { type: "button", title: "Play short preview" },
 				});
-				play.addEventListener("click", async () => {
-					try {
-						if (this.playing) {
-							this.playing.pause();
-							this.playing = null;
+				play.addEventListener("click", () => {
+					void (async () => {
+						try {
+							if (this.playing) {
+								this.playing.pause();
+								this.playing = null;
+							}
+							await this.syncIO.playClip(row.id);
+						} catch (err) {
+							console.error(err);
+							new Notice("Enot: could not play clip");
 						}
-						await this.syncIO.playClip(row.id);
-					} catch (err) {
-						console.error(err);
-						new Notice("Enot: could not play clip");
-					}
+					})();
 				});
 			}
 			const del = actions.createEl("button", {
@@ -350,23 +352,24 @@ export class VoiceCalibrationModal extends Modal {
 				text: "Remove",
 				attr: { type: "button" },
 			});
-			del.addEventListener("click", async () => {
-				this.rows.splice(index, 1);
-				this.dirty = true;
-				this.renderRows();
-				try {
-					const content = serializeCalibration(this.rows);
-					const clips = await this.syncIO.saveContent(content);
-					this.clipIds = new Set(clips);
-					this.dirty = false;
+			del.addEventListener("click", () => {
+				void (async () => {
+					this.rows.splice(index, 1);
+					this.dirty = true;
 					this.renderRows();
-					new Notice("Enot: voice removed");
-				} catch (err) {
-					console.error(err);
-					new Notice("Enot: could not remove voice on server");
-				}
+					try {
+						const content = serializeCalibration(this.rows);
+						const clips = await this.syncIO.saveContent(content);
+						this.clipIds = new Set(clips);
+						this.dirty = false;
+						this.renderRows();
+						new Notice("Enot: voice removed");
+					} catch (err) {
+						console.error(err);
+						new Notice("Enot: could not remove voice on server");
+					}
+				})();
 			});
-
 			card.createDiv({
 				cls: "enot-voice-card__phrase",
 				text: row.phrase ? `“${row.phrase}”` : "No sample phrase",
@@ -446,7 +449,7 @@ export interface BrandRow {
 export function parseBrandRows(text: string): BrandRow[] {
 	const rows: BrandRow[] = [];
 	const seen = new Set<string>();
-	const re = /^[\s>*\-]*\s*\[\[([^\]]+)\]\]\s*(?:\|\s*(.+))?\s*$/gm;
+	const re = /^[\s>*-]*\s*\[\[([^\]]+)\]\]\s*(?:\|\s*(.+))?\s*$/gm;
 	let m: RegExpExecArray | null;
 	while ((m = re.exec(text || "")) !== null) {
 		const canon = (m[1] || "").trim();
@@ -618,7 +621,7 @@ export function parseClarifyRows(text: string): ClarifyRow[] {
 	const rows: ClarifyRow[] = [];
 	const seen = new Set<string>();
 	const re =
-		/^[\s>*\-]*\s*heard:\s*`([^`]+)`\s*\|\s*candidates:\s*([^|\n]+?)(?:\s*\|\s*note:\s*(.+))?\s*$/gim;
+		/^[\s>*-]*\s*heard:\s*`([^`]+)`\s*\|\s*candidates:\s*([^|\n]+?)(?:\s*\|\s*note:\s*(.+))?\s*$/gim;
 	let m: RegExpExecArray | null;
 	while ((m = re.exec(text || "")) !== null) {
 		const heard = (m[1] || "").trim();
@@ -734,23 +737,25 @@ export class ClarifyQueueModal extends Modal {
 				text: "Confirm",
 				attr: { type: "button" },
 			});
-			confirm.addEventListener("click", async () => {
-				const c = (row.canon || "").trim();
-				if (!c) {
-					new Notice("Enot: enter a canon first");
-					return;
-				}
-				try {
-					await this.syncIO.confirmClarify(row.heard, c);
-					this.rows.splice(index, 1);
-					await this.syncIO.saveContent(serializeClarifyRows(this.rows));
-					this.dirty = false;
-					this.renderRows();
-					new Notice(`Enot: ${row.heard} → ${c}`);
-				} catch (err) {
-					console.error(err);
-					new Notice("Enot: confirm failed");
-				}
+			confirm.addEventListener("click", () => {
+				void (async () => {
+					const c = (row.canon || "").trim();
+					if (!c) {
+						new Notice("Enot: enter a canon first");
+						return;
+					}
+					try {
+						await this.syncIO.confirmClarify(row.heard, c);
+						this.rows.splice(index, 1);
+						await this.syncIO.saveContent(serializeClarifyRows(this.rows));
+						this.dirty = false;
+						this.renderRows();
+						new Notice(`Enot: ${row.heard} → ${c}`);
+					} catch (err) {
+						console.error(err);
+						new Notice("Enot: confirm failed");
+					}
+				})();
 			});
 			const del = el.createEl("button", {
 				cls: "enot-table-del",

@@ -41,7 +41,7 @@ import {
 const LEGACY_AUTH_FILE = "System/enot.json";
 const DEFAULT_API = "https://enot.upl.one";
 const POLL_MS = 15000;
-const UNSAFE_FILE = /[\\/:*?"<>|#\[\]]+/g;
+const UNSAFE_FILE = /[\\/:*?"<>|#[\]]+/g;
 
 /** Whisper ISO codes pinned in settings (plus auto). Keep in sync with server allow-list. */
 const SPEECH_LANGUAGES: { code: string; label: string }[] = [
@@ -145,10 +145,18 @@ function newInstallId(): string {
 }
 
 function errMessage(err: unknown): string {
-	if (err && typeof err === "object" && "message" in err) {
-		return String((err as { message: unknown }).message);
+	if (err instanceof Error) {
+		return err.message;
 	}
 	return String(err);
+}
+
+function asRecord(value: unknown): Record<string, unknown> {
+	return value !== null && typeof value === "object" ? (value as Record<string, unknown>) : {};
+}
+
+function asString(value: unknown, fallback = ""): string {
+	return typeof value === "string" ? value : fallback;
 }
 
 export function noteVaultPath(filename: string): string {
@@ -308,7 +316,7 @@ export function mergeNameHintsPreferLocal(local: string, remote: string): string
 	const parse = (text: string): string[] => {
 		const names: string[] = [];
 		const seen = new Set<string>();
-		const re = /^[\s>*\-]*\s*\[\[([^\]]+)\]\]\s*$/gm;
+		const re = /^[\s>*-]*\s*\[\[([^\]]+)\]\]\s*$/gm;
 		let m: RegExpExecArray | null;
 		while ((m = re.exec(text || "")) !== null) {
 			const label = (m[1] || "").trim();
@@ -348,7 +356,7 @@ export function mergeNameHintsPreferLocal(local: string, remote: string): string
 export function appendPeopleToNameHints(existing: string, people: string[]): { text: string; added: number } {
 	const parse = (text: string): Set<string> => {
 		const seen = new Set<string>();
-		const re = /^[\s>*\-]*\s*\[\[([^\]]+)\]\]\s*$/gm;
+		const re = /^[\s>*-]*\s*\[\[([^\]]+)\]\]\s*$/gm;
 		let m: RegExpExecArray | null;
 		while ((m = re.exec(text || "")) !== null) {
 			const key = (m[1] || "").trim().toLowerCase().replace(/ё/g, "е");
@@ -422,7 +430,6 @@ export default class EnotPlugin extends Plugin {
 		el.setAttribute("aria-label", "Enot");
 		el.setAttribute("data-tooltip-position", "right");
 		const icon = el.createDiv({ cls: "enot-ribbon-icon" });
-		icon.style.webkitMaskImage = `url(${ENOT_RACCOON_ICON_DATA_URL})`;
 		icon.style.maskImage = `url(${ENOT_RACCOON_ICON_DATA_URL})`;
 	}
 
@@ -460,7 +467,7 @@ export default class EnotPlugin extends Plugin {
 
 	private addCommands(): void {
 		this.addCommand({
-			id: "enot-copy-key",
+			id: "copy-key",
 			name: "Copy API key",
 			callback: async () => {
 				if (!this.settings.apiKey) {
@@ -472,33 +479,33 @@ export default class EnotPlugin extends Plugin {
 			},
 		});
 		this.addCommand({
-			id: "enot-open-checkout",
-			name: "Open Enot checkout",
+			id: "open-checkout",
+			name: "Open checkout",
 			callback: () => this.openCheckout(),
 		});
 		this.addCommand({
-			id: "enot-pull-inbox",
-			name: "Fetch notes from Enot",
+			id: "pull-inbox",
+			name: "Fetch notes",
 			callback: async () => {
 				await this.syncFromServer(true);
 			},
 		});
 		this.addCommand({
-			id: "enot-download-shortcut-phone",
+			id: "download-shortcut-phone",
 			name: "Download capture shortcut (iPhone)",
 			callback: async () => {
 				await this.downloadShortcut("phone");
 			},
 		});
 		this.addCommand({
-			id: "enot-download-shortcut-mac",
+			id: "download-shortcut-mac",
 			name: "Download capture shortcut (Mac)",
 			callback: async () => {
 				await this.downloadShortcut("mac");
 			},
 		});
 		this.addCommand({
-			id: "enot-upload-media",
+			id: "upload-media",
 			name: "Upload audio or video",
 			callback: () => {
 				void this.pickAndUploadMedia();
@@ -587,7 +594,7 @@ export default class EnotPlugin extends Plugin {
 		for (const child of kids) {
 			if (legacyNames.has(child.name)) {
 				try {
-					await this.app.vault.delete(child);
+					await this.app.fileManager.trashFile(child);
 				} catch (err) {
 					console.warn("Enot: could not remove legacy", child.path, err);
 				}
@@ -600,7 +607,7 @@ export default class EnotPlugin extends Plugin {
 			return;
 		}
 		try {
-			await this.app.vault.delete(sys);
+			await this.app.fileManager.trashFile(sys);
 		} catch (err) {
 			console.warn("Enot: could not remove empty System/", err);
 		}
@@ -617,16 +624,16 @@ export default class EnotPlugin extends Plugin {
 			return;
 		}
 		try {
-			const data = JSON.parse(await this.app.vault.read(file));
-			this.settings.installId = this.settings.installId || data.install_id || "";
-			this.settings.apiKey = this.settings.apiKey || data.api_key || "";
-			this.settings.userId = this.settings.userId || data.user_id || "";
-			this.settings.endpoint = this.settings.endpoint || data.endpoint || "";
-			const lang = normalizeSpeechLanguage(data.speech_language);
+			const data = asRecord(JSON.parse(await this.app.vault.read(file)));
+			this.settings.installId = this.settings.installId || asString(data.install_id);
+			this.settings.apiKey = this.settings.apiKey || asString(data.api_key);
+			this.settings.userId = this.settings.userId || asString(data.user_id);
+			this.settings.endpoint = this.settings.endpoint || asString(data.endpoint);
+			const lang = normalizeSpeechLanguage(asString(data.speech_language));
 			if (data.speech_language) {
 				this.settings.speechLanguage = lang;
 			}
-			if (data.endpoint) {
+			if (typeof data.endpoint === "string" && data.endpoint) {
 				this.settings.apiBase = data.endpoint;
 			}
 			await this.saveSettings();
@@ -659,11 +666,11 @@ export default class EnotPlugin extends Plugin {
 			contentType: "application/json",
 			body: JSON.stringify({ install_id: this.settings.installId }),
 		});
-		const body = res.json;
-		this.settings.apiKey = body.api_key;
-		this.settings.userId = body.user_id;
-		this.settings.installId = body.install_id;
-		this.settings.endpoint = body.endpoint || this.apiBase();
+		const body = asRecord(res.json);
+		this.settings.apiKey = asString(body.api_key);
+		this.settings.userId = asString(body.user_id);
+		this.settings.installId = asString(body.install_id, this.settings.installId);
+		this.settings.endpoint = asString(body.endpoint, this.apiBase());
 		await this.saveSettings();
 	}
 
@@ -676,7 +683,7 @@ export default class EnotPlugin extends Plugin {
 			method: "GET",
 			headers: { "X-API-Key": this.settings.apiKey },
 		});
-		this.entitlement = res.json;
+		this.entitlement = asRecord(res.json) as Entitlement;
 		const lang = normalizeSpeechLanguage(this.entitlement?.speech_language);
 		if (this.entitlement?.speech_language && this.settings.speechLanguage !== lang) {
 			this.settings.speechLanguage = lang;
@@ -769,24 +776,27 @@ export default class EnotPlugin extends Plugin {
 				method: "GET",
 				headers: { "X-API-Key": this.settings.apiKey },
 			});
-			const jobs: ActiveJob[] = Array.isArray(res.json?.jobs) ? res.json.jobs : [];
-			const activeIds = new Set<string>();
-			for (const raw of jobs) {
-				const jobId = String(raw.job_id || "");
-				if (!jobId) {
-					continue;
-				}
-				activeIds.add(jobId);
-				const job: ActiveJob = {
-					job_id: jobId,
-					status: String(raw.status || "queued"),
-					original_name: String(raw.original_name || ""),
+			const payload = asRecord(res.json);
+			const rawJobs = Array.isArray(payload.jobs) ? payload.jobs : [];
+			const jobs: ActiveJob[] = rawJobs.map((item) => {
+				const raw = asRecord(item);
+				return {
+					job_id: asString(raw.job_id),
+					status: asString(raw.status, "queued"),
+					original_name: asString(raw.original_name),
 					progress_pct: Number(raw.progress_pct) || 0,
 					queue_position: Number(raw.queue_position) || 1,
 					queue_total: Number(raw.queue_total) || 1,
-					created_at: String(raw.created_at || ""),
+					created_at: asString(raw.created_at),
 				};
-				await this.writeMarkdown(draftVaultPath(jobId), draftNoteContent(job, uiLang(this.settings)));
+			});
+			const activeIds = new Set<string>();
+			for (const job of jobs) {
+				if (!job.job_id) {
+					continue;
+				}
+				activeIds.add(job.job_id);
+				await this.writeMarkdown(draftVaultPath(job.job_id), draftNoteContent(job, uiLang(this.settings)));
 			}
 			await this.cleanupStaleDrafts(activeIds);
 		} catch (err) {
@@ -814,7 +824,7 @@ export default class EnotPlugin extends Plugin {
 				continue;
 			}
 			try {
-				await this.app.vault.delete(child);
+				await this.app.fileManager.trashFile(child);
 			} catch (err) {
 				console.warn("Enot: draft cleanup failed", child.path, err);
 			}
@@ -826,7 +836,7 @@ export default class EnotPlugin extends Plugin {
 		const existing = this.app.vault.getAbstractFileByPath(path);
 		if (existing instanceof TFile) {
 			try {
-				await this.app.vault.delete(existing);
+				await this.app.fileManager.trashFile(existing);
 			} catch (err) {
 				console.warn("Enot: remove draft failed", path, err);
 			}
@@ -846,13 +856,15 @@ export default class EnotPlugin extends Plugin {
 				method: "GET",
 				headers: { "X-API-Key": this.settings.apiKey },
 			});
-			const notes = Array.isArray(res.json?.notes) ? res.json.notes : [];
+			const notesRaw = asRecord(res.json).notes;
+			const notes = Array.isArray(notesRaw) ? notesRaw : [];
 			let saved = 0;
-			for (const note of notes) {
-				const filename = String(note.filename || "");
-				const content = String(note.content || "");
-				const jobId = String(note.job_id || "");
-				const calibrationAppend = String(note.calibration_append || "");
+			for (const item of notes) {
+				const note = asRecord(item);
+				const filename = asString(note.filename);
+				const content = asString(note.content);
+				const jobId = asString(note.job_id);
+				const calibrationAppend = asString(note.calibration_append);
 				if (!filename || !content || !jobId) {
 					continue;
 				}
@@ -901,7 +913,8 @@ export default class EnotPlugin extends Plugin {
 				headers: { "X-API-Key": this.settings.apiKey },
 				body: JSON.stringify({ content }),
 			});
-			const clips = Array.isArray(res.json?.clips) ? res.json.clips.map(String) : [];
+			const clipsRaw = asRecord(res.json).clips;
+			const clips = Array.isArray(clipsRaw) ? clipsRaw.map((c) => asString(c)).filter(Boolean) : [];
 			return clips;
 		} catch (err) {
 			console.warn("Enot: calibration push failed", err);
@@ -931,7 +944,9 @@ export default class EnotPlugin extends Plugin {
 			method: "GET",
 			headers: { "X-API-Key": this.settings.apiKey },
 		});
-		return Array.isArray(res.json?.clips) ? res.json.clips.map(String) : [];
+		return Array.isArray(asRecord(res.json).clips)
+			? (asRecord(res.json).clips as unknown[]).map((c) => asString(c)).filter(Boolean)
+			: [];
 	}
 
 	async playCalibrationClip(voiceId: string): Promise<void> {
@@ -971,7 +986,7 @@ export default class EnotPlugin extends Plugin {
 					method: "GET",
 					headers: { "X-API-Key": this.settings.apiKey },
 				});
-				return String(res.json?.content || NAME_HINTS_INTRO);
+				return asString(asRecord(res.json).content, NAME_HINTS_INTRO);
 			},
 			saveContent: async (content) => {
 				await requestUrl({
@@ -993,7 +1008,7 @@ export default class EnotPlugin extends Plugin {
 					method: "GET",
 					headers: { "X-API-Key": this.settings.apiKey },
 				});
-				return String(res.json?.content || BRAND_HINTS_INTRO);
+				return asString(asRecord(res.json).content, BRAND_HINTS_INTRO);
 			},
 			saveContent: async (content) => {
 				await requestUrl({
@@ -1015,7 +1030,7 @@ export default class EnotPlugin extends Plugin {
 					method: "GET",
 					headers: { "X-API-Key": this.settings.apiKey },
 				});
-				return String(res.json?.content || CLARIFY_INTRO);
+				return asString(asRecord(res.json).content, CLARIFY_INTRO);
 			},
 			saveContent: async (content) => {
 				await requestUrl({
@@ -1040,7 +1055,7 @@ export default class EnotPlugin extends Plugin {
 					method: "GET",
 					headers: { "X-API-Key": this.settings.apiKey },
 				});
-				return String(res.json?.content || CALIBRATION_INTRO);
+				return asString(asRecord(res.json).content, CALIBRATION_INTRO);
 			},
 			saveContent: async (content) => this.pushCalibration(true, content),
 			fetchClips: async () => this.fetchCalibrationClips(),
@@ -1112,12 +1127,12 @@ export default class EnotPlugin extends Plugin {
 					write_targets: normalizeWriteTargets(this.settings.writeTargets),
 				}),
 			});
-			this.entitlement = res.json;
+			this.entitlement = asRecord(res.json) as Entitlement;
 			const lang = normalizeSpeechLanguage(this.entitlement?.speech_language);
 			if (this.entitlement?.speech_language) {
 				this.settings.speechLanguage = lang;
 			}
-			const tz = String(this.entitlement?.timezone || "").trim();
+			const tz = asString(this.entitlement?.timezone).trim();
 			if (tz) {
 				this.settings.timezone = tz;
 			}
@@ -1185,7 +1200,7 @@ export default class EnotPlugin extends Plugin {
 			try {
 				recorder.stop();
 			} catch (err) {
-				reject(err);
+				reject(err instanceof Error ? err : new Error(String(err)));
 			}
 		}).catch((err) => {
 			new Notice(`Enot: stop failed - ${errMessage(err)}`);
@@ -1238,11 +1253,17 @@ export default class EnotPlugin extends Plugin {
 			new Notice("Enot: no API key. Open settings and press Register.");
 			return;
 		}
-		const input = document.createElement("input");
-		input.type = "file";
-		input.accept = "audio/*,video/*,.m4a,.mp3,.wav,.ogg,.mp4,.mov,.webm,.mkv";
+		const input = createEl("input", {
+			type: "file",
+			attr: {
+				accept: "audio/*,video/*,.m4a,.mp3,.wav,.ogg,.mp4,.mov,.webm,.mkv",
+			},
+		});
+		input.style.display = "none";
+		document.body.appendChild(input);
 		input.onchange = () => {
 			const file = input.files?.[0];
+			input.remove();
 			if (!file) {
 				return;
 			}
@@ -1280,17 +1301,18 @@ export default class EnotPlugin extends Plugin {
 				return;
 			}
 			if (res.status === 415 || res.status === 422) {
-				const detail = (res.json as { detail?: string })?.detail || res.text || "unsupported file";
+				const detail = asString(asRecord(res.json).detail, res.text || "unsupported file");
 				new Notice(`Enot: ${detail}`, 8000);
 				return;
 			}
 			if (res.status >= 400) {
-				const body = res.json as { error?: string; message?: string; detail?: string };
-				const msg = body?.message || body?.error || body?.detail || `HTTP ${res.status}`;
+				const body = asRecord(res.json);
+				const msg =
+					asString(body.message) || asString(body.error) || asString(body.detail) || `HTTP ${res.status}`;
 				new Notice(`Enot: upload failed - ${msg}`, 8000);
 				return;
 			}
-			const jobId = (res.json as { job_id?: string })?.job_id;
+			const jobId = asString(asRecord(res.json).job_id);
 			new Notice(
 				jobId ? `Enot: accepted (${jobId.slice(0, 12)}…). Note will appear in inbox.` : "Enot: accepted.",
 				6000,
@@ -1316,18 +1338,15 @@ export default class EnotPlugin extends Plugin {
 			const name =
 				variant === "phone" ? "Enot Capture iPhone.shortcut" : "Enot Capture Mac.shortcut";
 			// Desktop: write to user Downloads via Node fs when available
-			const fs = (window as unknown as { require?: (m: string) => unknown }).require?.("fs") as
-				| { writeFileSync: (path: string, data: Buffer) => void; existsSync: (p: string) => boolean }
+			const nodeRequire = (window as unknown as { require?: (m: string) => unknown }).require;
+			const fs = nodeRequire?.("fs") as
+				| { writeFileSync: (path: string, data: Uint8Array) => void }
 				| undefined;
-			const os = (window as unknown as { require?: (m: string) => unknown }).require?.("os") as
-				| { homedir: () => string }
-				| undefined;
-			const pathMod = (window as unknown as { require?: (m: string) => unknown }).require?.("path") as
-				| { join: (...parts: string[]) => string }
-				| undefined;
+			const os = nodeRequire?.("os") as { homedir: () => string } | undefined;
+			const pathMod = nodeRequire?.("path") as { join: (...parts: string[]) => string } | undefined;
 			if (fs && os && pathMod) {
 				const dest = pathMod.join(os.homedir(), "Downloads", name);
-				fs.writeFileSync(dest, Buffer.from(bytes));
+				fs.writeFileSync(dest, new Uint8Array(bytes));
 				new Notice(
 					`Enot: saved ${dest}. Open it in Shortcuts (allow Untrusted Shortcuts once).`,
 					10000,
@@ -1354,7 +1373,7 @@ export default class EnotPlugin extends Plugin {
 				method: "GET",
 				headers: { "X-API-Key": this.settings.apiKey },
 			});
-			const current = String(res.json?.content || NAME_HINTS_INTRO);
+			const current = asString(asRecord(res.json).content, NAME_HINTS_INTRO);
 			const { text, added } = appendPeopleToNameHints(current, people);
 			if (!added) {
 				return;
@@ -1465,9 +1484,9 @@ class EnotSettingTab extends PluginSettingTab {
 	display(): void {
 		const { containerEl } = this;
 		containerEl.empty();
-		containerEl.createEl("h2", { text: "Enot" });
+		new Setting(containerEl).setName("Enot").setHeading();
 		containerEl.createEl("p", {
-			text: "Shortcut sends audio. This plugin pulls finished notes into numbered PARA folders (00 Inbox → …) and optional People / Topics / Projects stubs.",
+			text: "Tap the raccoon to record or upload. This plugin pulls finished notes into PARA folders and optional People / Topics / Projects stubs.",
 		});
 
 		const access = this.plugin.entitlement?.access || "unknown";
