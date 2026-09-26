@@ -1484,7 +1484,7 @@ class EnotSettingTab extends PluginSettingTab {
 	display(): void {
 		const { containerEl } = this;
 		containerEl.empty();
-		new Setting(containerEl).setName("Settings").setHeading();
+		new Setting(containerEl).setName("Account").setHeading();
 		containerEl.createEl("p", {
 			text: "Tap the raccoon to record or upload. This plugin pulls finished notes into PARA folders and optional People / Topics / Projects stubs.",
 		});
