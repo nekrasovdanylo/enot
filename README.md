@@ -22,14 +22,3 @@ Works on desktop and mobile Obsidian. An Apple Shortcut is optional if you want 
 
 Free to install. Cloud processing: 7-day trial, then paid via Whop.  
 Privacy / what we send: [PRIVACY.md](PRIVACY.md).
-
-## Develop
-
-```bash
-npm install
-npm run build
-```
-
-## License
-
-MIT.
