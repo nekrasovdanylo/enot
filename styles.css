@@ -1,0 +1,255 @@
+.enot-key {
+  font-family: var(--font-monospace);
+  font-size: 12px;
+  word-break: break-all;
+}
+
+.enot-hours-ok {
+  color: var(--text-muted);
+}
+
+.enot-hours-warn {
+  color: var(--text-warning);
+  font-weight: 500;
+}
+
+.enot-hours-soft {
+  color: var(--color-orange, #d97706);
+  font-weight: 600;
+}
+
+.enot-hours-hard {
+  color: var(--text-error);
+  font-weight: 600;
+}
+
+.enot-table-modal {
+  width: min(640px, 94vw);
+  max-width: 94vw;
+}
+
+.enot-table-modal .modal-content {
+  max-height: 78vh;
+  overflow: auto;
+  padding-bottom: 4px;
+}
+
+.enot-modal-lead {
+  margin: 0 0 14px;
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.enot-table-empty {
+  color: var(--text-muted);
+  padding: 20px 4px;
+  font-size: 13px;
+  text-align: center;
+}
+
+.enot-name-list,
+.enot-voice-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 0 0 12px;
+}
+
+.enot-name-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.enot-brand-row {
+  display: grid;
+  grid-template-columns: minmax(90px, 0.4fr) 1fr auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.enot-clarify-row {
+  display: grid;
+  grid-template-columns: minmax(80px, 0.35fr) 1fr auto auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.enot-clarify-heard {
+  font-family: var(--font-monospace);
+  font-size: 12px;
+  word-break: break-word;
+}
+
+.enot-clarify-note {
+  grid-column: 1 / -1;
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: -4px;
+}
+
+.enot-table-confirm {
+  font-size: 12px;
+  padding: 5px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  white-space: nowrap;
+  background: var(--interactive-accent);
+  color: var(--text-on-accent, #fff);
+  border: none;
+}
+
+.enot-table-input {
+  width: 100%;
+  padding: 6px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--background-modifier-border);
+  background: var(--background-primary);
+}
+
+.enot-table-input:focus {
+  border-color: var(--interactive-accent);
+  outline: none;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--interactive-accent) 25%, transparent);
+}
+
+.enot-table-del {
+  font-size: 12px;
+  padding: 5px 10px;
+  color: var(--text-muted);
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.enot-table-del:hover {
+  color: var(--text-error);
+  background: color-mix(in srgb, var(--text-error) 12%, transparent);
+}
+
+.enot-voice-card {
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 10px;
+  padding: 12px 14px;
+  background: var(--background-secondary);
+}
+
+.enot-voice-card--clip {
+  border-color: color-mix(in srgb, var(--interactive-accent) 45%, var(--background-modifier-border));
+  box-shadow: inset 3px 0 0 var(--interactive-accent);
+}
+
+.enot-voice-card__top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.enot-voice-card__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.enot-voice-card__meeting {
+  font-size: 14px;
+  font-weight: 560;
+  line-height: 1.3;
+  color: var(--text-normal);
+}
+
+.enot-voice-badge {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 2px 7px;
+  border-radius: 999px;
+  color: var(--text-on-accent, #fff);
+  background: var(--interactive-accent);
+}
+
+.enot-voice-card__actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.enot-play-btn {
+  font-size: 12px;
+  padding: 5px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--background-modifier-border);
+  background: var(--background-primary);
+  color: var(--text-normal);
+  cursor: pointer;
+}
+
+.enot-play-btn:hover {
+  border-color: var(--interactive-accent);
+  color: var(--interactive-accent);
+}
+
+.enot-voice-card__phrase {
+  margin: 0 0 12px;
+  padding: 0;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.enot-voice-card__name {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 10px;
+  align-items: center;
+}
+
+.enot-voice-card__label {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.enot-modal-actions {
+  margin-top: 4px;
+  padding-top: 10px;
+  border-top: 1px solid var(--background-modifier-border);
+}
+
+.enot-modal-actions .setting-item {
+  border: none;
+  padding-left: 0;
+  padding-right: 0;
+}
+
+.enot-ribbon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.enot-ribbon-icon {
+  width: 18px;
+  height: 18px;
+  background-color: var(--icon-color);
+  -webkit-mask-size: contain;
+  mask-size: contain;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+  mask-position: center;
+}
+
+.enot-ribbon:hover .enot-ribbon-icon {
+  background-color: var(--icon-color-hover, var(--icon-color));
+}

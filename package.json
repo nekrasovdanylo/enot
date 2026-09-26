@@ -1,0 +1,23 @@
+{
+  "name": "enot",
+	"version": "0.1.22",
+  "description": "Enot: personal API key for voice capture into an Obsidian vault. Paid cloud processing after a 7-day trial.",
+  "main": "main.js",
+  "scripts": {
+    "dev": "node esbuild.config.mjs",
+    "build": "tsc -noEmit -skipLibCheck && node esbuild.config.mjs production"
+  },
+  "keywords": [
+    "obsidian-plugin",
+    "voice",
+    "enot"
+  ],
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^20.17.0",
+    "esbuild": "^0.25.0",
+    "obsidian": "latest",
+    "tslib": "^2.8.0",
+    "typescript": "^5.6.0"
+  }
+}
