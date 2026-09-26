@@ -594,7 +594,7 @@ export default class EnotPlugin extends Plugin {
 		for (const child of kids) {
 			if (legacyNames.has(child.name)) {
 				try {
-					await this.app.fileManager.trashFile(child);
+					await this.app.vault.trash(child, true);
 				} catch (err) {
 					console.warn("Enot: could not remove legacy", child.path, err);
 				}
@@ -607,7 +607,7 @@ export default class EnotPlugin extends Plugin {
 			return;
 		}
 		try {
-			await this.app.fileManager.trashFile(sys);
+			await this.app.vault.trash(sys, true);
 		} catch (err) {
 			console.warn("Enot: could not remove empty System/", err);
 		}
@@ -683,7 +683,7 @@ export default class EnotPlugin extends Plugin {
 			method: "GET",
 			headers: { "X-API-Key": this.settings.apiKey },
 		});
-		this.entitlement = asRecord(res.json) as Entitlement;
+		this.entitlement = asRecord(res.json);
 		const lang = normalizeSpeechLanguage(this.entitlement?.speech_language);
 		if (this.entitlement?.speech_language && this.settings.speechLanguage !== lang) {
 			this.settings.speechLanguage = lang;
@@ -824,7 +824,7 @@ export default class EnotPlugin extends Plugin {
 				continue;
 			}
 			try {
-				await this.app.fileManager.trashFile(child);
+				await this.app.vault.trash(child, true);
 			} catch (err) {
 				console.warn("Enot: draft cleanup failed", child.path, err);
 			}
@@ -836,7 +836,7 @@ export default class EnotPlugin extends Plugin {
 		const existing = this.app.vault.getAbstractFileByPath(path);
 		if (existing instanceof TFile) {
 			try {
-				await this.app.fileManager.trashFile(existing);
+				await this.app.vault.trash(existing, true);
 			} catch (err) {
 				console.warn("Enot: remove draft failed", path, err);
 			}
@@ -1127,7 +1127,7 @@ export default class EnotPlugin extends Plugin {
 					write_targets: normalizeWriteTargets(this.settings.writeTargets),
 				}),
 			});
-			this.entitlement = asRecord(res.json) as Entitlement;
+			this.entitlement = asRecord(res.json);
 			const lang = normalizeSpeechLanguage(this.entitlement?.speech_language);
 			if (this.entitlement?.speech_language) {
 				this.settings.speechLanguage = lang;
@@ -1254,12 +1254,12 @@ export default class EnotPlugin extends Plugin {
 			return;
 		}
 		const input = createEl("input", {
+			cls: "enot-file-input",
 			type: "file",
 			attr: {
 				accept: "audio/*,video/*,.m4a,.mp3,.wav,.ogg,.mp4,.mov,.webm,.mkv",
 			},
 		});
-		input.style.display = "none";
 		document.body.appendChild(input);
 		input.onchange = () => {
 			const file = input.files?.[0];
@@ -1484,7 +1484,7 @@ class EnotSettingTab extends PluginSettingTab {
 	display(): void {
 		const { containerEl } = this;
 		containerEl.empty();
-		new Setting(containerEl).setName("Enot").setHeading();
+		new Setting(containerEl).setName("Settings").setHeading();
 		containerEl.createEl("p", {
 			text: "Tap the raccoon to record or upload. This plugin pulls finished notes into PARA folders and optional People / Topics / Projects stubs.",
 		});

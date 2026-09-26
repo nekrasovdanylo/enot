@@ -232,6 +232,10 @@
   padding-right: 0;
 }
 
+.enot-file-input {
+  display: none;
+}
+
 .enot-ribbon {
   display: flex;
   align-items: center;
