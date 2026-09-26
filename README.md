@@ -13,7 +13,7 @@ Then open Enot settings and press **Register**. Default API: `https://enot.upl.o
 ## Use
 
 1. Tap the raccoon in the left ribbon.
-2. Choose **Microphone** (record) or **Upload file**.
+2. Choose **Microphone** (record) or **Upload file**. While recording, a mini recorder shows the waveform — tap **Stop & send** when done.
 3. Leave Obsidian open (or reopen later) so the finished note can sync.
 
 Works on desktop and mobile Obsidian. An Apple Shortcut is optional if you want to capture outside Obsidian.

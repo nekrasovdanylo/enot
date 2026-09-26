@@ -398,7 +398,14 @@ export default class EnotPlugin extends Plugin {
 	private mediaRecorder: MediaRecorder | null = null;
 	private mediaChunks: BlobPart[] = [];
 	private mediaStream: MediaStream | null = null;
-	private recordNotice: Notice | null = null;
+	private recordPanel: HTMLElement | null = null;
+	private recordTimerEl: HTMLElement | null = null;
+	private recordWaveCanvas: HTMLCanvasElement | null = null;
+	private recordStartedAt = 0;
+	private recordTimerId: number | null = null;
+	private recordRaf = 0;
+	private audioCtx: AudioContext | null = null;
+	private analyser: AnalyserNode | null = null;
 
 	async onload(): Promise<void> {
 		await this.loadSettings();
@@ -1178,8 +1185,7 @@ export default class EnotPlugin extends Plugin {
 				this.teardownRecorder(false);
 			};
 			recorder.start(1000);
-			this.recordNotice?.hide();
-			this.recordNotice = new Notice("Enot: recording… open the raccoon menu → Stop & send", 0);
+			this.mountRecordPanel(stream);
 		} catch (err) {
 			this.teardownRecorder(false);
 			new Notice(`Enot: mic permission denied - ${errMessage(err)}`, 8000);
@@ -1206,16 +1212,7 @@ export default class EnotPlugin extends Plugin {
 			new Notice(`Enot: stop failed - ${errMessage(err)}`);
 			return null;
 		});
-		this.mediaRecorder = null;
-		this.mediaChunks = [];
-		if (this.mediaStream) {
-			for (const track of this.mediaStream.getTracks()) {
-				track.stop();
-			}
-			this.mediaStream = null;
-		}
-		this.recordNotice?.hide();
-		this.recordNotice = null;
+		this.teardownRecorder(false);
 		if (!blob || blob.size < 256) {
 			new Notice("Enot: recording empty");
 			return;
@@ -1225,6 +1222,132 @@ export default class EnotPlugin extends Plugin {
 			type: blob.type || "audio/webm",
 		});
 		await this.uploadMediaFile(file);
+	}
+
+	private mountRecordPanel(stream: MediaStream): void {
+		this.unmountRecordPanel();
+		const panel = document.createElement("div");
+		panel.className = "enot-recorder";
+		panel.setAttribute("role", "dialog");
+		panel.setAttribute("aria-label", "Enot voice recorder");
+
+		const head = panel.createDiv({ cls: "enot-recorder__head" });
+		const titles = head.createDiv({ cls: "enot-recorder__titles" });
+		titles.createDiv({ cls: "enot-recorder__brand", text: "Enot" });
+		titles.createDiv({ cls: "enot-recorder__sub", text: "Voice recorder" });
+		const live = head.createDiv({ cls: "enot-recorder__live" });
+		live.createSpan({ cls: "enot-recorder__live-dot" });
+		live.createSpan({ text: "LIVE" });
+
+		this.recordTimerEl = panel.createDiv({ cls: "enot-recorder__timer", text: "00:00" });
+
+		const waveWrap = panel.createDiv({ cls: "enot-recorder__wave" });
+		const canvas = waveWrap.createEl("canvas", { cls: "enot-recorder__canvas" });
+		canvas.width = 320;
+		canvas.height = 64;
+		this.recordWaveCanvas = canvas;
+
+		const actions = panel.createDiv({ cls: "enot-recorder__actions" });
+		const stopBtn = actions.createEl("button", {
+			cls: "enot-recorder__stop",
+			text: "Stop & send",
+		});
+		stopBtn.type = "button";
+		stopBtn.addEventListener("click", () => {
+			void this.stopRecordingAndUpload();
+		});
+
+		document.body.appendChild(panel);
+		this.recordPanel = panel;
+		this.recordStartedAt = Date.now();
+		this.recordTimerId = window.setInterval(() => this.tickRecordTimer(), 250);
+		this.startWaveform(stream);
+	}
+
+	private tickRecordTimer(): void {
+		if (!this.recordTimerEl) {
+			return;
+		}
+		const sec = Math.max(0, Math.floor((Date.now() - this.recordStartedAt) / 1000));
+		const mm = String(Math.floor(sec / 60)).padStart(2, "0");
+		const ss = String(sec % 60).padStart(2, "0");
+		this.recordTimerEl.setText(`${mm}:${ss}`);
+	}
+
+	private startWaveform(stream: MediaStream): void {
+		try {
+			const Ctx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+			const ctx = new Ctx();
+			const source = ctx.createMediaStreamSource(stream);
+			const analyser = ctx.createAnalyser();
+			analyser.fftSize = 256;
+			analyser.smoothingTimeConstant = 0.75;
+			source.connect(analyser);
+			this.audioCtx = ctx;
+			this.analyser = analyser;
+			const data = new Uint8Array(analyser.frequencyBinCount);
+			const paint = () => {
+				const canvas = this.recordWaveCanvas;
+				const a = this.analyser;
+				if (!canvas || !a) {
+					return;
+				}
+				a.getByteFrequencyData(data);
+				const g = canvas.getContext("2d");
+				if (!g) {
+					return;
+				}
+				const { width: w, height: h } = canvas;
+				g.clearRect(0, 0, w, h);
+				const barColor =
+					getComputedStyle(canvas).getPropertyValue("--text-normal").trim() || "#2a2a2a";
+				g.fillStyle = barColor;
+				const bars = 42;
+				const gap = 2;
+				const barW = Math.max(2, (w - gap * (bars - 1)) / bars);
+				const mid = h / 2;
+				for (let i = 0; i < bars; i++) {
+					const idx = Math.floor((i / bars) * data.length * 0.7);
+					const v = (data[idx] ?? 0) / 255;
+					const bh = Math.max(4, v * (h - 8));
+					const x = i * (barW + gap);
+					const r = Math.min(2, barW / 2);
+					const y = mid - bh / 2;
+					g.beginPath();
+					g.moveTo(x + r, y);
+					g.arcTo(x + barW, y, x + barW, y + bh, r);
+					g.arcTo(x + barW, y + bh, x, y + bh, r);
+					g.arcTo(x, y + bh, x, y, r);
+					g.arcTo(x, y, x + barW, y, r);
+					g.closePath();
+					g.fill();
+				}
+				this.recordRaf = window.requestAnimationFrame(paint);
+			};
+			this.recordRaf = window.requestAnimationFrame(paint);
+		} catch (err) {
+			console.warn("Enot: waveform unavailable", err);
+		}
+	}
+
+	private unmountRecordPanel(): void {
+		if (this.recordRaf) {
+			window.cancelAnimationFrame(this.recordRaf);
+			this.recordRaf = 0;
+		}
+		if (this.recordTimerId != null) {
+			window.clearInterval(this.recordTimerId);
+			this.recordTimerId = null;
+		}
+		if (this.audioCtx) {
+			void this.audioCtx.close().catch(() => undefined);
+			this.audioCtx = null;
+		}
+		this.analyser = null;
+		this.recordWaveCanvas = null;
+		this.recordTimerEl = null;
+		this.recordPanel?.remove();
+		this.recordPanel = null;
 	}
 
 	private teardownRecorder(_keepNotice: boolean): void {
@@ -1244,8 +1367,7 @@ export default class EnotPlugin extends Plugin {
 			}
 			this.mediaStream = null;
 		}
-		this.recordNotice?.hide();
-		this.recordNotice = null;
+		this.unmountRecordPanel();
 	}
 
 	async pickAndUploadMedia(): Promise<void> {

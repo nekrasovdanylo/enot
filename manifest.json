@@ -1,7 +1,7 @@
 {
 	"id": "enot",
 	"name": "Enot",
-	"version": "0.1.25",
+	"version": "0.1.26",
 	"minAppVersion": "1.6.0",
 	"description": "Issues a personal Enot API key for voice capture into your vault. 7-day trial, then paid cloud processing.",
 	"author": "Enot",

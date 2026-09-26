@@ -257,3 +257,125 @@
 .enot-ribbon:hover .enot-ribbon-icon {
   background-color: var(--icon-color-hover, var(--icon-color));
 }
+
+.enot-recorder {
+  position: fixed;
+  right: 24px;
+  bottom: 48px;
+  z-index: 100;
+  width: min(360px, calc(100vw - 32px));
+  padding: 18px 18px 16px;
+  border-radius: 16px;
+  background: var(--modal-background, var(--background-primary));
+  border: 1px solid var(--background-modifier-border);
+  box-shadow:
+    0 12px 40px rgba(0, 0, 0, 0.18),
+    0 2px 8px rgba(0, 0, 0, 0.08);
+  font-family: var(--font-interface);
+}
+
+.enot-recorder__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.enot-recorder__brand {
+  font-size: 15px;
+  font-weight: 650;
+  color: var(--text-normal);
+  line-height: 1.2;
+}
+
+.enot-recorder__sub {
+  margin-top: 2px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.enot-recorder__live {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 9px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--text-error, #c0392b);
+  background: color-mix(in srgb, var(--text-error, #c0392b) 12%, transparent);
+}
+
+.enot-recorder__live-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--text-error, #c0392b);
+  box-shadow: 0 0 0 0 color-mix(in srgb, var(--text-error, #c0392b) 55%, transparent);
+  animation: enot-recorder-pulse 1.4s ease-out infinite;
+}
+
+@keyframes enot-recorder-pulse {
+  0% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--text-error, #c0392b) 45%, transparent);
+  }
+  70% {
+    box-shadow: 0 0 0 8px transparent;
+  }
+  100% {
+    box-shadow: 0 0 0 0 transparent;
+  }
+}
+
+.enot-recorder__timer {
+  text-align: center;
+  font-size: 34px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-normal);
+  margin: 4px 0 12px;
+  line-height: 1.1;
+}
+
+.enot-recorder__wave {
+  height: 64px;
+  border-radius: 12px;
+  background: var(--background-secondary);
+  overflow: hidden;
+  margin-bottom: 14px;
+}
+
+.enot-recorder__canvas {
+  display: block;
+  width: 100%;
+  height: 64px;
+}
+
+.enot-recorder__actions {
+  display: flex;
+}
+
+.enot-recorder__stop {
+  flex: 1;
+  appearance: none;
+  border: none;
+  cursor: pointer;
+  border-radius: 10px;
+  padding: 11px 14px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-on-accent, #fff);
+  background: var(--text-normal);
+}
+
+.enot-recorder__stop:hover {
+  filter: brightness(1.08);
+}
+
+.theme-dark .enot-recorder__stop {
+  background: var(--interactive-accent);
+  color: var(--text-on-accent, #fff);
+}
