@@ -790,6 +790,82 @@ export class ClarifyQueueModal extends Modal {
 	}
 }
 
+export type PlanCard = {
+	key: string;
+	label: string;
+	price_usd: number;
+	soft_hours: number;
+	hard_hours: number;
+	blurb: string;
+	recommended?: boolean;
+	checkout_url?: string;
+};
+
+export class PlansModal extends Modal {
+	constructor(
+		app: App,
+		private opts: {
+			plans: PlanCard[];
+			currentPlan: string | null;
+			access: string;
+			onChoose: (planKey: string) => void;
+		},
+	) {
+		super(app);
+	}
+
+	onOpen(): void {
+		const { contentEl } = this;
+		contentEl.empty();
+		this.modalEl.addClass("enot-plans-modal");
+		contentEl.createEl("h2", { text: "Choose your Enot plan" });
+		contentEl.createEl("p", {
+			text: "Cloud audio hours reset each month on paid plans. Switching plans cancels the old Whop membership at period end — hours do not stack.",
+			cls: "enot-modal-lead",
+		});
+
+		const current = (this.opts.currentPlan || "").toLowerCase();
+		const grid = contentEl.createDiv({ cls: "enot-plans-grid" });
+
+		for (const plan of this.opts.plans) {
+			const isCurrent = this.opts.access === "paid" && plan.key === current;
+			const card = grid.createDiv({
+				cls: "enot-plan-card" + (plan.recommended ? " enot-plan-card--recommended" : ""),
+			});
+			const top = card.createDiv({ cls: "enot-plan-card__top" });
+			top.createDiv({ cls: "enot-plan-card__name", text: plan.label });
+			if (plan.recommended) {
+				top.createSpan({ cls: "enot-plan-card__badge", text: "Recommended" });
+			}
+			if (isCurrent) {
+				top.createSpan({ cls: "enot-plan-card__badge enot-plan-card__badge--current", text: "Current" });
+			}
+			const price = card.createDiv({ cls: "enot-plan-card__price" });
+			price.createSpan({ text: `$${plan.price_usd}` });
+			price.createSpan({ cls: "enot-plan-card__per", text: "/ mo" });
+			card.createDiv({
+				cls: "enot-plan-card__hours",
+				text: `Up to ~${plan.soft_hours} h / month (hard stop ~${plan.hard_hours} h)`,
+			});
+			card.createEl("p", { cls: "enot-plan-card__blurb", text: plan.blurb });
+			const btn = card.createEl("button", {
+				cls: "enot-plan-card__cta" + (plan.recommended ? " mod-cta" : ""),
+				text: isCurrent ? "Current plan" : `Continue with ${plan.label}`,
+			});
+			btn.type = "button";
+			btn.disabled = isCurrent;
+			btn.addEventListener("click", () => {
+				this.opts.onChoose(plan.key);
+				this.close();
+			});
+		}
+	}
+
+	onClose(): void {
+		this.contentEl.empty();
+	}
+}
+
 export class WriteTargetsModal extends Modal {
 	private draft: WriteTargets;
 

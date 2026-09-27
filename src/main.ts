@@ -36,6 +36,8 @@ import {
 	BRAND_HINTS_INTRO,
 	CLARIFY_INTRO,
 	CALIBRATION_INTRO,
+	PlansModal,
+	type PlanCard,
 } from "./tables";
 
 const LEGACY_AUTH_FILE = "System/enot.json";
@@ -93,6 +95,7 @@ interface Entitlement {
 	days_left?: number;
 	checkout_url?: string;
 	checkout_urls?: Record<string, string>;
+	plans?: PlanCard[];
 	plan?: string | null;
 	plan_label?: string | null;
 	hours_soft?: number | null;
@@ -111,6 +114,37 @@ interface Entitlement {
 	timezone?: string;
 	write_targets?: WriteTargets;
 }
+
+/** Fallback if /v1/me has no plans yet (old server). */
+const DEFAULT_PLAN_CARDS: PlanCard[] = [
+	{
+		key: "lite",
+		label: "Lite",
+		price_usd: 9,
+		soft_hours: 8,
+		hard_hours: 12,
+		blurb: "Occasional short voice memos. Light capture, not full meeting days.",
+		recommended: false,
+	},
+	{
+		key: "plus",
+		label: "Plus",
+		price_usd: 29,
+		soft_hours: 45,
+		hard_hours: 65,
+		blurb: "Regular meetings and voice notes. Best default for most people.",
+		recommended: true,
+	},
+	{
+		key: "pro",
+		label: "Pro",
+		price_usd: 79,
+		soft_hours: 160,
+		hard_hours: 180,
+		blurb: "Heavy month of calls — roughly a full work-month of audio.",
+		recommended: false,
+	},
+];
 
 interface ActiveJob {
 	job_id: string;
@@ -487,8 +521,8 @@ export default class EnotPlugin extends Plugin {
 		});
 		this.addCommand({
 			id: "open-checkout",
-			name: "Open checkout",
-			callback: () => this.openCheckout(),
+			name: "Choose plan",
+			callback: () => this.openPlansModal(),
 		});
 		this.addCommand({
 			id: "pull-inbox",
@@ -709,7 +743,18 @@ export default class EnotPlugin extends Plugin {
 				0,
 			);
 		} else if (this.entitlement?.access === "trial") {
-			new Notice(`Enot: ${this.entitlement.days_left} trial day(s) left`);
+			const daysLeft = this.entitlement.days_left ?? 0;
+			const used = this.entitlement.hours_used ?? 0;
+			const ceiling = this.entitlement.hours_hard ?? this.entitlement.hours_limit;
+			const hoursBit =
+				ceiling != null ? ` · ${used.toFixed(2)} / ${ceiling} h trial audio` : "";
+			new Notice(`Enot: ${daysLeft} trial day(s) left${hoursBit}`);
+			const level = this.entitlement.hours_level;
+			if (level === "soft" || level === "warn") {
+				new Notice("Enot: trial audio is almost used up — subscribe to keep going.", 10000);
+			} else if (level === "hard") {
+				new Notice("Enot: trial audio limit reached. Subscribe to continue.", 12000);
+			}
 		} else if (this.entitlement?.access === "paid") {
 			const level = this.entitlement.hours_level;
 			const used = this.entitlement.hours_used ?? 0;
@@ -729,9 +774,15 @@ export default class EnotPlugin extends Plugin {
 	}
 
 	openCheckout(planKey?: string): void {
+		if (!planKey) {
+			this.openPlansModal();
+			return;
+		}
 		const urls = this.entitlement?.checkout_urls || {};
+		const fromCatalog = (this.entitlement?.plans || []).find((p) => p.key === planKey);
 		const url =
-			(planKey && urls[planKey]) ||
+			(fromCatalog?.checkout_url || "").trim() ||
+			urls[planKey] ||
 			this.entitlement?.checkout_url ||
 			urls.plus ||
 			urls.lite ||
@@ -742,6 +793,19 @@ export default class EnotPlugin extends Plugin {
 			return;
 		}
 		window.open(url);
+	}
+
+	openPlansModal(): void {
+		const plans =
+			this.entitlement?.plans && this.entitlement.plans.length
+				? this.entitlement.plans
+				: DEFAULT_PLAN_CARDS;
+		new PlansModal(this.app, {
+			plans,
+			currentPlan: this.entitlement?.plan || null,
+			access: this.entitlement?.access || "unknown",
+			onChoose: (key) => this.openCheckout(key),
+		}).open();
 	}
 
 	openManageBilling(): void {
@@ -1625,6 +1689,13 @@ class EnotSettingTab extends PluginSettingTab {
 		if (access === "expired") {
 			accessDesc = "Trial ended. Voice notes pause until you subscribe.";
 			hoursCls = "enot-hours-hard";
+		} else if (access === "trial") {
+			const hoursBit =
+				ceiling != null ? ` · ${hoursUsed.toFixed(2)} / ${ceiling} h audio` : "";
+			accessDesc = `Trial: ${days} day(s) left${hoursBit}.`;
+			if (hoursLevel === "warn") hoursCls = "enot-hours-warn";
+			else if (hoursLevel === "soft") hoursCls = "enot-hours-soft";
+			else if (hoursLevel === "hard") hoursCls = "enot-hours-hard";
 		} else if (access === "paid") {
 			const hoursBit =
 				ceiling != null ? ` · ${hoursUsed.toFixed(2)} / ${ceiling} h this month` : "";
@@ -1659,15 +1730,9 @@ class EnotSettingTab extends PluginSettingTab {
 
 		new Setting(containerEl)
 			.setName("Plans")
-			.setDesc("Upgrade or change plan. Old Whop membership is canceled at period end (no hour summing).")
+			.setDesc("Compare Lite / Plus / Pro — hours and what each pack is for — then checkout on Whop.")
 			.addButton((btn) =>
-				btn.setButtonText("Lite $9").onClick(() => this.plugin.openCheckout("lite")),
-			)
-			.addButton((btn) =>
-				btn.setButtonText("Plus $29").setCta().onClick(() => this.plugin.openCheckout("plus")),
-			)
-			.addButton((btn) =>
-				btn.setButtonText("Pro $79").onClick(() => this.plugin.openCheckout("pro")),
+				btn.setButtonText("Upgrade").setCta().onClick(() => this.plugin.openPlansModal()),
 			);
 
 		if (this.plugin.entitlement?.manage_url) {
