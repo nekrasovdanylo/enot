@@ -801,6 +801,44 @@ export type PlanCard = {
 	checkout_url?: string;
 };
 
+/** Soft paywall when trial/plan audio allowance is insufficient. */
+export class QuotaGateModal extends Modal {
+	constructor(
+		app: App,
+		private opts: {
+			title: string;
+			body: string;
+			onUpgrade: () => void;
+		},
+	) {
+		super(app);
+	}
+
+	onOpen(): void {
+		const { contentEl } = this;
+		contentEl.empty();
+		this.modalEl.addClass("enot-quota-modal");
+		contentEl.createEl("h2", { text: this.opts.title });
+		contentEl.createEl("p", { text: this.opts.body, cls: "enot-modal-lead" });
+		const actions = contentEl.createDiv({ cls: "enot-modal-actions" });
+		new Setting(actions)
+			.addButton((btn) =>
+				btn
+					.setButtonText("Upgrade")
+					.setCta()
+					.onClick(() => {
+						this.close();
+						this.opts.onUpgrade();
+					}),
+			)
+			.addButton((btn) => btn.setButtonText("Not now").onClick(() => this.close()));
+	}
+
+	onClose(): void {
+		this.contentEl.empty();
+	}
+}
+
 export class PlansModal extends Modal {
 	constructor(
 		app: App,

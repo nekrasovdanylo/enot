@@ -37,6 +37,7 @@ import {
 	CLARIFY_INTRO,
 	CALIBRATION_INTRO,
 	PlansModal,
+	QuotaGateModal,
 	type PlanCard,
 } from "./tables";
 
@@ -191,6 +192,62 @@ function asRecord(value: unknown): Record<string, unknown> {
 
 function asString(value: unknown, fallback = ""): string {
 	return typeof value === "string" ? value : fallback;
+}
+
+function asNumber(value: unknown): number | null {
+	if (typeof value === "number" && Number.isFinite(value)) {
+		return value;
+	}
+	if (typeof value === "string" && value.trim() !== "") {
+		const n = Number(value);
+		return Number.isFinite(n) ? n : null;
+	}
+	return null;
+}
+
+/** Human length for quota copy (~12 min, ~1.5 h). */
+function formatAudioAllowance(seconds: number): string {
+	const s = Math.max(0, seconds);
+	if (s < 60) {
+		return `${Math.max(1, Math.round(s))} sec`;
+	}
+	const mins = s / 60;
+	if (mins < 90) {
+		return `~${Math.round(mins)} min`;
+	}
+	return `~${(mins / 60).toFixed(1)} h`;
+}
+
+function probeMediaDurationSeconds(file: File): Promise<number | null> {
+	return new Promise((resolve) => {
+		const url = URL.createObjectURL(file);
+		const videoLike = (file.type || "").startsWith("video/") || /\.(mp4|mov|mkv|webm)$/i.test(file.name);
+		const el = document.createElement(videoLike ? "video" : "audio");
+		let settled = false;
+		const finish = (sec: number | null) => {
+			if (settled) {
+				return;
+			}
+			settled = true;
+			window.clearTimeout(timer);
+			URL.revokeObjectURL(url);
+			el.removeAttribute("src");
+			try {
+				el.load();
+			} catch {
+				/* ignore */
+			}
+			resolve(sec);
+		};
+		const timer = window.setTimeout(() => finish(null), 8000);
+		el.preload = "metadata";
+		el.onloadedmetadata = () => {
+			const d = el.duration;
+			finish(Number.isFinite(d) && d > 0 ? d : null);
+		};
+		el.onerror = () => finish(null);
+		el.src = url;
+	});
 }
 
 export function noteVaultPath(filename: string): string {
@@ -715,10 +772,11 @@ export default class EnotPlugin extends Plugin {
 		await this.saveSettings();
 	}
 
-	async refreshEntitlement(): Promise<void> {
+	async refreshEntitlement(opts?: { quiet?: boolean }): Promise<void> {
 		if (!this.settings.apiKey) {
 			return;
 		}
+		const quiet = Boolean(opts?.quiet);
 		const res = await requestUrl({
 			url: `${this.apiBase()}/v1/me`,
 			method: "GET",
@@ -733,6 +791,9 @@ export default class EnotPlugin extends Plugin {
 		if (this.entitlement?.write_targets) {
 			this.settings.writeTargets = normalizeWriteTargets(this.entitlement.write_targets);
 			await this.saveSettings();
+		}
+		if (quiet) {
+			return;
 		}
 		if (this.entitlement?.subscription_notice) {
 			new Notice(`Enot: ${this.entitlement.subscription_notice}`, 12000);
@@ -771,6 +832,98 @@ export default class EnotPlugin extends Plugin {
 				);
 			}
 		}
+	}
+
+	/** Seconds left under hard cap; 0 = blocked; null = unknown / no cap. */
+	remainingHardSeconds(): number | null {
+		const ent = this.entitlement;
+		if (!ent) {
+			return null;
+		}
+		if (ent.access === "expired") {
+			return 0;
+		}
+		const hard = asNumber(ent.hours_hard) ?? asNumber(ent.hours_limit);
+		if (hard == null || hard <= 0) {
+			return null;
+		}
+		const used = asNumber(ent.hours_used) ?? 0;
+		return Math.max(0, (hard - used) * 3600);
+	}
+
+	showQuotaGate(title: string, body: string): void {
+		new QuotaGateModal(this.app, {
+			title,
+			body,
+			onUpgrade: () => this.openPlansModal(),
+		}).open();
+	}
+
+	/**
+	 * Block record/upload when trial expired or hard hours insufficient.
+	 * @param neededSeconds known clip length; omit to only check remaining > 0.
+	 */
+	async ensureCaptureAllowed(neededSeconds?: number | null): Promise<boolean> {
+		try {
+			await this.refreshEntitlement({ quiet: true });
+		} catch (err) {
+			console.warn("Enot: entitlement refresh failed before capture", err);
+		}
+		const access = this.entitlement?.access || "unknown";
+		if (access === "expired") {
+			this.showQuotaGate(
+				"Trial ended",
+				"Your free week is over. Upgrade a plan to keep turning voice into notes.",
+			);
+			return false;
+		}
+		const remaining = this.remainingHardSeconds();
+		if (remaining === null) {
+			return true;
+		}
+		if (remaining <= 0) {
+			const used = asNumber(this.entitlement?.hours_used) ?? 0;
+			const hard =
+				asNumber(this.entitlement?.hours_hard) ?? asNumber(this.entitlement?.hours_limit) ?? used;
+			const kind = access === "trial" ? "trial" : "monthly";
+			this.showQuotaGate(
+				access === "trial" ? "Trial audio limit reached" : "Monthly audio limit reached",
+				`You've used ${used.toFixed(2)} / ${hard} h of ${kind} audio. Upgrade your plan to continue.`,
+			);
+			return false;
+		}
+		if (neededSeconds != null && neededSeconds > 0 && neededSeconds > remaining + 2) {
+			this.showQuotaGate(
+				"File exceeds your remaining audio",
+				`This clip is ${formatAudioAllowance(neededSeconds)}, but you have ${formatAudioAllowance(remaining)} left on your plan. Use a shorter file or upgrade.`,
+			);
+			return false;
+		}
+		return true;
+	}
+
+	handleProcessGateResponse(body: Record<string, unknown>): boolean {
+		const status = asString(body.status);
+		if (status !== "quota_exceeded" && status !== "payment_required") {
+			return false;
+		}
+		if (asNumber(body.hours_used) != null || asNumber(body.hours_hard) != null) {
+			this.entitlement = {
+				...(this.entitlement || {}),
+				...body,
+				access: status === "payment_required" ? "expired" : this.entitlement?.access,
+				hours_level: status === "quota_exceeded" ? "hard" : this.entitlement?.hours_level,
+			};
+		}
+		const title =
+			asString(body.notification_title) ||
+			(status === "payment_required" ? "Trial ended" : "Audio limit reached");
+		const fallbackBody =
+			status === "payment_required"
+				? "Your free week is over. Upgrade a plan to continue."
+				: "You've used your audio allowance. Upgrade your plan to continue.";
+		this.showQuotaGate(title, asString(body.notification_body, fallbackBody));
+		return true;
 	}
 
 	openCheckout(planKey?: string): void {
@@ -1224,6 +1377,9 @@ export default class EnotPlugin extends Plugin {
 		if (this.mediaRecorder?.state === "recording") {
 			return;
 		}
+		if (!(await this.ensureCaptureAllowed())) {
+			return;
+		}
 		if (!navigator.mediaDevices?.getUserMedia) {
 			new Notice("Enot: microphone not available in this Obsidian build.");
 			return;
@@ -1262,6 +1418,8 @@ export default class EnotPlugin extends Plugin {
 			this.teardownRecorder(false);
 			return;
 		}
+		const recordedSec =
+			this.recordStartedAt > 0 ? Math.max(0, (Date.now() - this.recordStartedAt) / 1000) : null;
 		const blob = await new Promise<Blob>((resolve, reject) => {
 			recorder.onstop = () => {
 				resolve(new Blob(this.mediaChunks, { type: recorder.mimeType || "audio/webm" }));
@@ -1281,11 +1439,14 @@ export default class EnotPlugin extends Plugin {
 			new Notice("Enot: recording empty");
 			return;
 		}
+		if (!(await this.ensureCaptureAllowed(recordedSec))) {
+			return;
+		}
 		const ext = blob.type.includes("mp4") || blob.type.includes("m4a") ? "m4a" : "webm";
 		const file = new File([blob], `enot-record-${Date.now()}.${ext}`, {
 			type: blob.type || "audio/webm",
 		});
-		await this.uploadMediaFile(file);
+		await this.uploadMediaFile(file, recordedSec);
 	}
 
 	private mountRecordPanel(stream: MediaStream): void {
@@ -1458,7 +1619,7 @@ export default class EnotPlugin extends Plugin {
 		input.click();
 	}
 
-	async uploadMediaFile(file: File): Promise<void> {
+	async uploadMediaFile(file: File, knownDurationSec?: number | null): Promise<void> {
 		if (!this.settings.apiKey) {
 			new Notice("Enot: no API key");
 			return;
@@ -1466,6 +1627,13 @@ export default class EnotPlugin extends Plugin {
 		const maxMb = 200;
 		if (file.size > maxMb * 1024 * 1024) {
 			new Notice(`Enot: file exceeds ${maxMb} MB`);
+			return;
+		}
+		let durationSec = knownDurationSec != null && knownDurationSec > 0 ? knownDurationSec : null;
+		if (durationSec == null) {
+			durationSec = await probeMediaDurationSeconds(file);
+		}
+		if (!(await this.ensureCaptureAllowed(durationSec))) {
 			return;
 		}
 		new Notice(`Enot: uploading ${file.name}…`);
@@ -1491,14 +1659,17 @@ export default class EnotPlugin extends Plugin {
 				new Notice(`Enot: ${detail}`, 8000);
 				return;
 			}
+			const body = asRecord(res.json);
+			if (this.handleProcessGateResponse(body)) {
+				return;
+			}
 			if (res.status >= 400) {
-				const body = asRecord(res.json);
 				const msg =
 					asString(body.message) || asString(body.error) || asString(body.detail) || `HTTP ${res.status}`;
 				new Notice(`Enot: upload failed - ${msg}`, 8000);
 				return;
 			}
-			const jobId = asString(asRecord(res.json).job_id);
+			const jobId = asString(body.job_id);
 			new Notice(
 				jobId ? `Enot: accepted (${jobId.slice(0, 12)}…). Note will appear in inbox.` : "Enot: accepted.",
 				6000,
