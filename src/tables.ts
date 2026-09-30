@@ -839,6 +839,65 @@ export class QuotaGateModal extends Modal {
 	}
 }
 
+/** First-run language picker before Register. */
+export class OnboardingModal extends Modal {
+	private lang: "en" | "ru";
+
+	constructor(
+		app: App,
+		private opts: {
+			initialLang: "en" | "ru";
+			title: string;
+			lead: string;
+			languageLabel: string;
+			continueLabel: string;
+			langOptions: { code: "en" | "ru"; label: string }[];
+			onContinue: (lang: "en" | "ru") => void | Promise<void>;
+		},
+	) {
+		super(app);
+		this.lang = opts.initialLang;
+	}
+
+	onOpen(): void {
+		const { contentEl } = this;
+		contentEl.empty();
+		this.modalEl.addClass("enot-onboarding-modal");
+		contentEl.createEl("h2", { text: this.opts.title });
+		contentEl.createEl("p", { text: this.opts.lead, cls: "enot-modal-lead" });
+
+		new Setting(contentEl).setName(this.opts.languageLabel).addDropdown((dd) => {
+			for (const opt of this.opts.langOptions) {
+				dd.addOption(opt.code, opt.label);
+			}
+			dd.setValue(this.lang).onChange((v) => {
+				this.lang = v === "ru" ? "ru" : "en";
+			});
+		});
+
+		const actions = contentEl.createDiv({ cls: "enot-modal-actions" });
+		new Setting(actions).addButton((btn) =>
+			btn
+				.setButtonText(this.opts.continueLabel)
+				.setCta()
+				.onClick(async () => {
+					btn.setDisabled(true);
+					try {
+						await this.opts.onContinue(this.lang);
+						this.close();
+					} catch (err) {
+						console.error(err);
+						btn.setDisabled(false);
+					}
+				}),
+		);
+	}
+
+	onClose(): void {
+		this.contentEl.empty();
+	}
+}
+
 export class PlansModal extends Modal {
 	constructor(
 		app: App,

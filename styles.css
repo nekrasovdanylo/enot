@@ -240,6 +240,10 @@
   width: min(440px, 94vw);
 }
 
+.enot-onboarding-modal {
+  width: min(420px, 94vw);
+}
+
 .enot-plans-modal {
   width: min(720px, 94vw);
   max-width: 94vw;

@@ -14,7 +14,9 @@ import {
 	MEETINGS_DIR,
 	PEOPLE_DIR,
 	PROJECTS_DIR,
+	TEMPLATES_DIR,
 	TOPICS_DIR,
+	AGREEMENTS_DIR,
 	backlinkLine,
 	isEnotCapture,
 	normalizeWriteTargets,
@@ -26,10 +28,12 @@ import {
 	type WriteTargets,
 } from "./graph";
 import { ENOT_RACCOON_ICON_DATA_URL } from "./icon";
+import { BASE_LANGUAGES, normalizeBaseLanguage, t, type BaseLanguage } from "./i18n";
 import {
 	BrandHintsModal,
 	ClarifyQueueModal,
 	NameHintsModal,
+	OnboardingModal,
 	VoiceCalibrationModal,
 	WriteTargetsModal,
 	NAME_HINTS_INTRO,
@@ -40,6 +44,14 @@ import {
 	QuotaGateModal,
 	type PlanCard,
 } from "./tables";
+import {
+	AGREEMENT_TEMPLATE,
+	AGREEMENTS_README,
+	SEED_FOLDERS,
+	WELCOME_BODY_EN,
+	WELCOME_PATH,
+	timelineBody,
+} from "./vault-seed";
 
 const LEGACY_AUTH_FILE = "System/enot.json";
 const DEFAULT_API = "https://enot.upl.one";
@@ -87,6 +99,14 @@ interface EnotSettings {
 	userId: string;
 	endpoint: string;
 	speechLanguage: string;
+	/** Plugin UI locale (folders stay English). */
+	baseLanguage: BaseLanguage;
+	/** User finished language onboarding modal. */
+	onboarded: boolean;
+	/** Welcome letter already written to vault. */
+	welcomeWritten: boolean;
+	/** PARA + Agreements folders seeded. */
+	vaultSeeded: boolean;
 	timezone: string;
 	writeTargets: WriteTargets;
 }
@@ -164,6 +184,10 @@ const DEFAULT_SETTINGS: EnotSettings = {
 	userId: "",
 	endpoint: "",
 	speechLanguage: "auto",
+	baseLanguage: "en",
+	onboarded: false,
+	welcomeWritten: false,
+	vaultSeeded: false,
 	timezone: "",
 	writeTargets: normalizeWriteTargets(null),
 };
@@ -272,7 +296,10 @@ export function draftVaultPath(jobId: string): string {
 	return `${MEETINGS_DIR}/_enot_processing_${safe}.md`;
 }
 
-function uiLang(settings: { speechLanguage: string }): "ru" | "en" {
+function uiLang(settings: { baseLanguage?: string; speechLanguage: string }): "ru" | "en" {
+	if (settings.baseLanguage) {
+		return normalizeBaseLanguage(settings.baseLanguage);
+	}
 	const lang = (settings.speechLanguage || "auto").toLowerCase();
 	if (lang === "ru" || lang === "uk") {
 		return "ru";
@@ -627,13 +654,136 @@ export default class EnotPlugin extends Plugin {
 		void this.syncFromServer(false);
 
 		try {
-			await this.ensureRegistered();
+			await this.ensureOnboardedAndRegistered();
 			await this.refreshEntitlement();
 			await this.ensureTimezone();
 			await this.pushUserSettings();
 		} catch (err) {
 			console.error("Enot register failed", err);
-			new Notice("Enot: could not register. Try again or check your connection.");
+			new Notice(t(uiLang(this.settings), "notice.register_fail"));
+		}
+	}
+
+	/** Language modal (once) → Register → seed folders + welcome. */
+	async ensureOnboardedAndRegistered(): Promise<void> {
+		if (!this.settings.onboarded) {
+			await this.promptOnboardingLanguage();
+		}
+		if (!this.settings.apiKey) {
+			await this.ensureRegistered();
+		}
+		await this.seedVaultLayout();
+	}
+
+	promptOnboardingLanguage(): Promise<void> {
+		return new Promise((resolve, reject) => {
+			let settled = false;
+			const finish = (fn: () => void | Promise<void>) => {
+				if (settled) {
+					return;
+				}
+				settled = true;
+				Promise.resolve(fn()).then(resolve).catch(reject);
+			};
+			const lang0 = normalizeBaseLanguage(this.settings.baseLanguage);
+			const modal = new OnboardingModal(this.app, {
+				initialLang: lang0,
+				title: t(lang0, "onboarding.title"),
+				lead: t(lang0, "onboarding.lead"),
+				languageLabel: t(lang0, "onboarding.language"),
+				continueLabel: t(lang0, "onboarding.continue"),
+				langOptions: BASE_LANGUAGES,
+				onContinue: async (lang) => {
+					this.settings.baseLanguage = lang;
+					this.settings.onboarded = true;
+					if (this.settings.speechLanguage === "auto" && lang === "ru") {
+						this.settings.speechLanguage = "ru";
+					}
+					await this.saveSettings();
+					new Notice(t(lang, "notice.onboarded"));
+					finish(() => undefined);
+				},
+			});
+			const prevClose = modal.onClose.bind(modal);
+			modal.onClose = () => {
+				prevClose();
+				if (!settled) {
+					finish(async () => {
+						this.settings.baseLanguage = "en";
+						this.settings.onboarded = true;
+						await this.saveSettings();
+					});
+				}
+			};
+			modal.open();
+		});
+	}
+
+	async ensureFolder(path: string): Promise<void> {
+		const rel = path.replace(/^\/+/, "").replace(/\/+$/, "");
+		if (!rel) {
+			return;
+		}
+		if (await this.app.vault.adapter.exists(rel)) {
+			return;
+		}
+		const parts = rel.split("/").filter(Boolean);
+		let cur = "";
+		for (const part of parts) {
+			cur = cur ? `${cur}/${part}` : part;
+			try {
+				if (!(await this.app.vault.adapter.exists(cur))) {
+					await this.app.vault.createFolder(cur);
+				}
+			} catch {
+				/* exists */
+			}
+		}
+	}
+
+	async seedVaultLayout(): Promise<void> {
+		let wroteSomething = false;
+		if (!this.settings.vaultSeeded) {
+			for (const folder of SEED_FOLDERS) {
+				await this.ensureFolder(folder);
+			}
+			this.settings.vaultSeeded = true;
+			wroteSomething = true;
+		}
+
+		const agreementReadme = `${AGREEMENTS_DIR}/README.md`;
+		const timelinePath = `${AGREEMENTS_DIR}/_Timeline.md`;
+		const agreementTpl = `${TEMPLATES_DIR}/Agreement.md`;
+
+		if (!(await this.app.vault.adapter.exists(agreementReadme))) {
+			await this.ensureFolder(AGREEMENTS_DIR);
+			await this.app.vault.create(agreementReadme, AGREEMENTS_README);
+			wroteSomething = true;
+		}
+		if (!(await this.app.vault.adapter.exists(timelinePath))) {
+			await this.ensureFolder(AGREEMENTS_DIR);
+			const today = new Date().toISOString().slice(0, 10);
+			await this.app.vault.create(timelinePath, timelineBody(today));
+			wroteSomething = true;
+		}
+		if (!(await this.app.vault.adapter.exists(agreementTpl))) {
+			await this.ensureFolder(TEMPLATES_DIR);
+			await this.app.vault.create(agreementTpl, AGREEMENT_TEMPLATE);
+			wroteSomething = true;
+		}
+
+		if (!this.settings.welcomeWritten) {
+			if (!(await this.app.vault.adapter.exists(WELCOME_PATH))) {
+				await this.ensureFolder(WELCOME_PATH.split("/")[0]!);
+				await this.app.vault.create(WELCOME_PATH, WELCOME_BODY_EN);
+			}
+			this.settings.welcomeWritten = true;
+			wroteSomething = true;
+		}
+
+		if (wroteSomething) {
+			await this.saveSettings();
+			new Notice(t(uiLang(this.settings), "notice.vault_ready"));
 		}
 	}
 
@@ -644,6 +794,14 @@ export default class EnotPlugin extends Plugin {
 	async loadSettings(): Promise<void> {
 		const raw = Object.assign({}, DEFAULT_SETTINGS, await this.loadData()) as EnotSettings;
 		raw.writeTargets = normalizeWriteTargets(raw.writeTargets);
+		raw.baseLanguage = normalizeBaseLanguage(raw.baseLanguage);
+		raw.onboarded = Boolean(raw.onboarded);
+		raw.welcomeWritten = Boolean(raw.welcomeWritten);
+		raw.vaultSeeded = Boolean(raw.vaultSeeded);
+		// Existing installs with an API key skip the language modal
+		if (raw.apiKey && !raw.onboarded) {
+			raw.onboarded = true;
+		}
 		this.settings = raw;
 	}
 
@@ -1841,9 +1999,10 @@ class EnotSettingTab extends PluginSettingTab {
 	display(): void {
 		const { containerEl } = this;
 		containerEl.empty();
-		new Setting(containerEl).setName("Account").setHeading();
+		const L = uiLang(this.plugin.settings);
+		new Setting(containerEl).setName(t(L, "settings.account")).setHeading();
 		containerEl.createEl("p", {
-			text: "Tap the raccoon to record or upload. This plugin pulls finished notes into PARA folders and optional People / Topics / Projects stubs.",
+			text: t(L, "settings.intro"),
 		});
 
 		const access = this.plugin.entitlement?.access || "unknown";
@@ -1855,37 +2014,47 @@ class EnotSettingTab extends PluginSettingTab {
 		const hoursLevel = this.plugin.entitlement?.hours_level || "ok";
 		const ceiling =
 			this.plugin.entitlement?.hours_limit ?? hoursHard ?? hoursSoft;
-		let accessDesc = `Trial: ${days} day(s) left.`;
+		let accessDesc = t(L, "access.trial", { days: String(days), hours: "" });
 		let hoursCls = "enot-hours-ok";
 		if (access === "expired") {
-			accessDesc = "Trial ended. Voice notes pause until you subscribe.";
+			accessDesc = t(L, "access.expired");
 			hoursCls = "enot-hours-hard";
 		} else if (access === "trial") {
 			const hoursBit =
-				ceiling != null ? ` · ${hoursUsed.toFixed(2)} / ${ceiling} h audio` : "";
-			accessDesc = `Trial: ${days} day(s) left${hoursBit}.`;
+				ceiling != null
+					? t(L, "access.hours_trial", {
+							used: hoursUsed.toFixed(2),
+							ceiling: String(ceiling),
+						})
+					: "";
+			accessDesc = t(L, "access.trial", { days: String(days), hours: hoursBit });
 			if (hoursLevel === "warn") hoursCls = "enot-hours-warn";
 			else if (hoursLevel === "soft") hoursCls = "enot-hours-soft";
 			else if (hoursLevel === "hard") hoursCls = "enot-hours-hard";
 		} else if (access === "paid") {
 			const hoursBit =
-				ceiling != null ? ` · ${hoursUsed.toFixed(2)} / ${ceiling} h this month` : "";
-			accessDesc = `Plan: ${planLabel || "paid"}${hoursBit}.`;
+				ceiling != null
+					? t(L, "access.hours_paid", {
+							used: hoursUsed.toFixed(2),
+							ceiling: String(ceiling),
+						})
+					: "";
+			accessDesc = t(L, "access.paid", { plan: planLabel || "paid", hours: hoursBit });
 			if (hoursLevel === "warn") hoursCls = "enot-hours-warn";
 			else if (hoursLevel === "soft") hoursCls = "enot-hours-soft";
 			else if (hoursLevel === "hard") hoursCls = "enot-hours-hard";
 		}
 
 		const accessSetting = new Setting(containerEl)
-			.setName("Access")
+			.setName(t(L, "settings.access"))
 			.setDesc(accessDesc)
 			.addButton((btn) =>
-				btn.setButtonText("Refresh status").onClick(async () => {
+				btn.setButtonText(t(L, "settings.refresh")).onClick(async () => {
 					try {
 						await this.plugin.refreshEntitlement();
 						this.display();
 					} catch (err) {
-						new Notice("Could not refresh access");
+						new Notice(t(L, "settings.refresh_fail"));
 						console.error(err);
 					}
 				}),
@@ -1900,34 +2069,39 @@ class EnotSettingTab extends PluginSettingTab {
 		}
 
 		new Setting(containerEl)
-			.setName("Plans")
-			.setDesc("Compare Lite / Plus / Pro — hours and what each pack is for — then checkout on Whop.")
+			.setName(t(L, "settings.plans"))
+			.setDesc(t(L, "settings.plans_desc"))
 			.addButton((btn) =>
-				btn.setButtonText("Upgrade").setCta().onClick(() => this.plugin.openPlansModal()),
+				btn
+					.setButtonText(t(L, "settings.upgrade"))
+					.setCta()
+					.onClick(() => this.plugin.openPlansModal()),
 			);
 
 		if (this.plugin.entitlement?.manage_url) {
 			new Setting(containerEl)
-				.setName("Whop billing")
-				.setDesc("Cancel or manage the active membership in Whop.")
+				.setName(t(L, "settings.whop"))
+				.setDesc(t(L, "settings.whop_desc"))
 				.addButton((btn) =>
-					btn.setButtonText("Manage subscription").onClick(() => this.plugin.openManageBilling()),
+					btn
+						.setButtonText(t(L, "settings.manage"))
+						.onClick(() => this.plugin.openManageBilling()),
 				);
 		}
 
 		if (!this.plugin.settings.apiKey) {
 			new Setting(containerEl)
-				.setName("Account")
-				.setDesc("Connect this vault to Enot to get your API key.")
+				.setName(t(L, "settings.account"))
+				.setDesc(t(L, "settings.register_desc"))
 				.addButton((btn) =>
-					btn.setButtonText("Register").setCta().onClick(async () => {
+					btn.setButtonText(t(L, "settings.register")).setCta().onClick(async () => {
 						try {
-							await this.plugin.ensureRegistered();
+							await this.plugin.ensureOnboardedAndRegistered();
 							await this.plugin.refreshEntitlement();
-							new Notice("Enot: key received");
+							new Notice(t(uiLang(this.plugin.settings), "notice.key_received"));
 							this.display();
 						} catch (err) {
-							new Notice("Enot: registration failed");
+							new Notice(t(uiLang(this.plugin.settings), "notice.register_fail"));
 							console.error(err);
 						}
 					}),
@@ -1935,8 +2109,25 @@ class EnotSettingTab extends PluginSettingTab {
 		}
 
 		new Setting(containerEl)
-			.setName("Speech language")
-			.setDesc("Pinned language for Whisper and note labels (auto = detect per recording). Saved to your account.")
+			.setName(t(L, "settings.base_language"))
+			.setDesc(t(L, "settings.base_language_desc"))
+			.addDropdown((dd) => {
+				for (const { code, label } of BASE_LANGUAGES) {
+					dd.addOption(code, label);
+				}
+				dd.setValue(normalizeBaseLanguage(this.plugin.settings.baseLanguage)).onChange(
+					async (value) => {
+						this.plugin.settings.baseLanguage = normalizeBaseLanguage(value);
+						this.plugin.settings.onboarded = true;
+						await this.plugin.saveSettings();
+						this.display();
+					},
+				);
+			});
+
+		new Setting(containerEl)
+			.setName(t(L, "settings.speech"))
+			.setDesc(t(L, "settings.speech_desc"))
 			.addDropdown((dd) => {
 				for (const { code, label } of SPEECH_LANGUAGES) {
 					dd.addOption(code, label);
@@ -1953,8 +2144,8 @@ class EnotSettingTab extends PluginSettingTab {
 			});
 
 		new Setting(containerEl)
-			.setName("Write folders")
-			.setDesc("Which PARA folders Enot may fill (00 Inbox → 10 Topics). Opens a checklist.")
+			.setName(t(L, "settings.write_folders"))
+			.setDesc("Which PARA folders Enot may fill (00 Inbox → 11 Agreements). Opens a checklist.")
 			.addButton((btn) =>
 				btn.setButtonText("Open").setCta().onClick(() => {
 					this.plugin.openWriteTargetsModal();
@@ -1962,7 +2153,7 @@ class EnotSettingTab extends PluginSettingTab {
 			);
 
 		new Setting(containerEl)
-			.setName("Name hints")
+			.setName(t(L, "settings.name_hints"))
 			.setDesc("People names for transcript correction and LLM. Known voices still hint Whisper.")
 			.addButton((btn) =>
 				btn.setButtonText("Open").setCta().onClick(() => {
@@ -1971,7 +2162,7 @@ class EnotSettingTab extends PluginSettingTab {
 			);
 
 		new Setting(containerEl)
-			.setName("Brand hints")
+			.setName(t(L, "settings.brand_hints"))
 			.setDesc("Products/brands + ASR aliases (DDX | дэдэикс). Correction + LLM only - not Whisper dump.")
 			.addButton((btn) =>
 				btn.setButtonText("Open").setCta().onClick(() => {
@@ -1980,8 +2171,8 @@ class EnotSettingTab extends PluginSettingTab {
 			);
 
 		new Setting(containerEl)
-			.setName("Clarify queue")
-			.setDesc("Doubtful ASR tokens. Confirm a canon to teach future decoding.")
+			.setName(t(L, "settings.clarify"))
+			.setDesc("Heard → canon queue from past notes. Confirm rows to teach ASR.")
 			.addButton((btn) =>
 				btn.setButtonText("Open").setCta().onClick(() => {
 					this.plugin.openClarifyQueueTable();
@@ -1989,8 +2180,8 @@ class EnotSettingTab extends PluginSettingTab {
 			);
 
 		new Setting(containerEl)
-			.setName("Unknown voices")
-			.setDesc("New fingerprints waiting for a name. Open to listen, name, or remove.")
+			.setName(t(L, "settings.voices"))
+			.setDesc("Name unknown speakers; clips play from the server.")
 			.addButton((btn) =>
 				btn.setButtonText("Open").setCta().onClick(() => {
 					this.plugin.openVoiceCalibrationTable();
@@ -1998,23 +2189,21 @@ class EnotSettingTab extends PluginSettingTab {
 			);
 
 		new Setting(containerEl)
-			.setName("Capture shortcut")
-			.setDesc(
-				"Personal Shortcut with your API key inside. iPhone: Record Audio. Mac: pick an audio file. Enable Untrusted Shortcuts once on first import.",
-			)
+			.setName(t(L, "settings.shortcut"))
+			.setDesc("Personal Apple Shortcut for capture outside Obsidian.")
 			.addButton((btn) =>
-				btn.setButtonText("iPhone").setCta().onClick(async () => {
-					await this.plugin.downloadShortcut("phone");
+				btn.setButtonText("iPhone").onClick(() => {
+					void this.plugin.downloadShortcut("phone");
 				}),
 			)
 			.addButton((btn) =>
-				btn.setButtonText("Mac").onClick(async () => {
-					await this.plugin.downloadShortcut("mac");
+				btn.setButtonText("Mac").onClick(() => {
+					void this.plugin.downloadShortcut("mac");
 				}),
 			);
 
 		new Setting(containerEl)
-			.setName("Timezone")
+			.setName(t(L, "settings.timezone"))
 			.setDesc(`Local timezone for note folders and upload time (${this.plugin.settings.timezone || "detecting…"}).`)
 			.addButton((btn) =>
 				btn.setButtonText("Refresh").onClick(async () => {
@@ -2027,12 +2216,12 @@ class EnotSettingTab extends PluginSettingTab {
 			);
 
 		new Setting(containerEl)
-			.setName("Install ID")
+			.setName(t(L, "settings.install_id"))
 			.setDesc("Stable install id. Reinstalling on the same vault returns the same key.")
 			.addText((text) => text.setValue(this.plugin.settings.installId).setDisabled(true));
 
 		new Setting(containerEl)
-			.setName("API key")
+			.setName(t(L, "settings.api_key"))
 			.setDesc("Sent as X-API-Key. Download a personal Shortcut below - key is baked in.")
 			.addText((text) => {
 				text.inputEl.addClass("enot-key");

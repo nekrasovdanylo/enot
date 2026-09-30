@@ -9,6 +9,7 @@ export const TEMPLATES_DIR = "07 Templates";
 export const ARCHIVE_DIR = "08 Archive";
 export const PEOPLE_DIR = "09 People";
 export const TOPICS_DIR = "10 Topics";
+export const AGREEMENTS_DIR = "11 Agreements";
 
 /** Vault roots the server may write into (developer PARA+). */
 export const ENOT_PATH_ROOTS = [
@@ -19,6 +20,7 @@ export const ENOT_PATH_ROOTS = [
 	`${DECISIONS_DIR}/`,
 	`${PEOPLE_DIR}/`,
 	`${TOPICS_DIR}/`,
+	`${AGREEMENTS_DIR}/`,
 	// Legacy
 	"Notes/",
 	"00-inbox/",
