@@ -502,3 +502,14 @@
   background: var(--interactive-accent);
   color: var(--text-on-accent, #fff);
 }
+
+.enot-is-hidden {
+  display: none;
+}
+
+.enot-delete-paths {
+  margin: 0.5rem 0 1rem;
+  padding-left: 1.25rem;
+  color: var(--text-muted);
+  font-size: 13px;
+}

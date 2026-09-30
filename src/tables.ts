@@ -1121,8 +1121,7 @@ export class DeleteAccountModal extends Modal {
 		contentEl.createEl("p", { text: this.opts.lead, cls: "enot-modal-lead" });
 
 		contentEl.createEl("p", { text: this.opts.vaultListLabel, cls: "setting-item-description" });
-		const list = contentEl.createEl("ul", { cls: "enot-delete-paths" });
-		list.style.display = "none";
+		const list = contentEl.createEl("ul", { cls: "enot-delete-paths enot-is-hidden" });
 		for (const p of this.opts.vaultPaths) {
 			list.createEl("li", { text: p });
 		}
@@ -1130,7 +1129,7 @@ export class DeleteAccountModal extends Modal {
 		new Setting(contentEl).setName(this.opts.vaultLabel).addToggle((tog) => {
 			tog.setValue(false).onChange((on) => {
 				this.wipeVault = on;
-				list.style.display = on ? "" : "none";
+				list.toggleClass("enot-is-hidden", !on);
 			});
 		});
 
