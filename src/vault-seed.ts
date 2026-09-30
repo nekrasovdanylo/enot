@@ -71,13 +71,13 @@ type: meta
 
 # Agreements
 
-Track commitments and deadlines from meetings **without** extra Obsidian plugins.
+Track commitments and deadlines from meetings.
 
-1. Create a note from \`07 Templates/Agreement.md\` (or duplicate one).
-2. Set \`due\`, \`owner\`, and \`status\` in the frontmatter.
-3. Mirror important bars in \`_Timeline.md\` (Mermaid Gantt — preview mode).
+1. Enot auto-creates Agreement notes from meeting action items (owner + due).
+2. Edit \`due\`, \`owner\`, and \`status\` in the frontmatter anytime.
+3. \`_Timeline.md\` rebuilds automatically on inbox sync (Mermaid Gantt — preview mode).
 
-Enot does not auto-fill this folder yet; paste or link from meeting notes manually.
+Manual notes from \`07 Templates/Agreement.md\` are indexed the same way.
 `;
 
 export function timelineBody(todayIso: string): string {

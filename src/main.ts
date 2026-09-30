@@ -1241,6 +1241,7 @@ export default class EnotPlugin extends Plugin {
 			const notesRaw = asRecord(res.json).notes;
 			const notes = Array.isArray(notesRaw) ? notesRaw : [];
 			let saved = 0;
+			let wroteAgreements = false;
 			for (const item of notes) {
 				const note = asRecord(item);
 				const filename = asString(note.filename);
@@ -1259,6 +1260,23 @@ export default class EnotPlugin extends Plugin {
 				// calibration_append already on server vault; plugin is API-only for System data
 				void calibrationAppend;
 				await this.mergePeopleIntoNameHints(parseYamlList(parseFrontmatter(content), "people"));
+
+				const sidecarsRaw = note.sidecar_notes;
+				const sidecars = Array.isArray(sidecarsRaw) ? sidecarsRaw : [];
+				for (const side of sidecars) {
+					const sc = asRecord(side);
+					const scName = asString(sc.filename);
+					const scContent = asString(sc.content);
+					if (!scName || !scContent) {
+						continue;
+					}
+					const scPath = noteVaultPath(scName);
+					await this.writeMarkdown(scPath, scContent);
+					if (scPath.startsWith(`${AGREEMENTS_DIR}/`)) {
+						wroteAgreements = true;
+					}
+				}
+
 				await requestUrl({
 					url: `${this.apiBase()}/v1/inbox/${jobId}/ack`,
 					method: "POST",
@@ -1266,6 +1284,13 @@ export default class EnotPlugin extends Plugin {
 				});
 				saved += 1;
 				new Notice(`Enot: saved ${path}`);
+			}
+			if (wroteAgreements || saved > 0) {
+				try {
+					await this.rebuildAgreementsTimeline();
+				} catch (err) {
+					console.warn("Enot: agreements timeline rebuild failed", err);
+				}
 			}
 			if (manual && saved === 0) {
 				new Notice("Enot: no new notes");
@@ -1278,6 +1303,95 @@ export default class EnotPlugin extends Plugin {
 		}
 	}
 
+	/** Rebuild `11 Agreements/_Timeline.md` from agreement frontmatter (due/owner). */
+	async rebuildAgreementsTimeline(): Promise<void> {
+		await this.ensureFolder(AGREEMENTS_DIR);
+		const files = this.app.vault
+			.getMarkdownFiles()
+			.filter(
+				(f) =>
+					f.path.startsWith(`${AGREEMENTS_DIR}/`) &&
+					f.name !== "README.md" &&
+					f.name !== "_Timeline.md" &&
+					!f.path.slice(AGREEMENTS_DIR.length + 1).includes("/"),
+			);
+
+		type Row = { title: string; due: string; owner: string; status: string };
+		const rows: Row[] = [];
+		for (const file of files) {
+			const markdown = await this.app.vault.read(file);
+			const front = parseFrontmatter(markdown);
+			const due = parseYamlScalar(front, "due");
+			if (!/^\d{4}-\d{2}-\d{2}$/.test(due)) {
+				continue;
+			}
+			const owner = parseYamlScalar(front, "owner");
+			const status = (parseYamlScalar(front, "status") || "open").toLowerCase();
+			let title = "";
+			const h1 = markdown.match(/^#\s+(.+)$/m);
+			if (h1?.[1]) {
+				title = h1[1].trim();
+			}
+			if (!title) {
+				title = file.basename.replace(/^\d{4}-\d{2}-\d{2}\s+/, "").trim() || file.basename;
+			}
+			rows.push({ title, due, owner, status });
+		}
+		rows.sort((a, b) => a.due.localeCompare(b.due) || a.title.localeCompare(b.title));
+
+		const byOwner = new Map<string, Row[]>();
+		for (const row of rows) {
+			const key = row.owner.trim() || "Open";
+			const list = byOwner.get(key) || [];
+			list.push(row);
+			byOwner.set(key, list);
+		}
+
+		const escapeLabel = (s: string): string =>
+			s.replace(/[:#]/g, " ").replace(/\s+/g, " ").trim().slice(0, 48) || "task";
+
+		const lines: string[] = [
+			"---",
+			"type: timeline",
+			"enot_generated: true",
+			"---",
+			"",
+			"# Agreements timeline",
+			"",
+			"Auto-updated when Enot pulls meeting commitments. Edit Agreement notes; this file is rebuilt from their frontmatter.",
+			"",
+			"```mermaid",
+			"gantt",
+			"    title Commitments",
+			"    dateFormat  YYYY-MM-DD",
+			"    axisFormat  %b %d",
+		];
+
+		if (rows.length === 0) {
+			const today = new Date().toISOString().slice(0, 10);
+			lines.push("    section Open");
+			lines.push(`    No open commitments yet    :${today}, 1d`);
+		} else {
+			let idx = 0;
+			const owners = [...byOwner.keys()].sort((a, b) => {
+				if (a === "Open") return 1;
+				if (b === "Open") return -1;
+				return a.localeCompare(b);
+			});
+			for (const owner of owners) {
+				lines.push(`    section ${escapeLabel(owner)}`);
+				for (const row of byOwner.get(owner) || []) {
+					idx += 1;
+					const tag = row.status === "done" || row.status === "closed" ? "done" : "active";
+					lines.push(`    ${escapeLabel(row.title)}    :${tag}, t${idx}, ${row.due}, 1d`);
+				}
+			}
+		}
+		lines.push("```");
+		lines.push("");
+
+		await this.writeMarkdown(`${AGREEMENTS_DIR}/_Timeline.md`, `${lines.join("\n")}\n`);
+	}
 
 	async pushCalibration(force: boolean = false, contentOverride?: string): Promise<string[]> {
 		if ((!force && this.syncingCalibration) || !this.settings.apiKey) {
