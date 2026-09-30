@@ -917,7 +917,7 @@ export class PlansModal extends Modal {
 		this.modalEl.addClass("enot-plans-modal");
 		contentEl.createEl("h2", { text: "Choose your Enot plan" });
 		contentEl.createEl("p", {
-			text: "Cloud audio hours reset each month on paid plans. Switching plans cancels the old Whop membership at period end — hours do not stack.",
+			text: "Cloud audio hours reset each month on paid plans. Switching plans cancels the old Whop membership at period end. Hours do not stack.",
 			cls: "enot-modal-lead",
 		});
 

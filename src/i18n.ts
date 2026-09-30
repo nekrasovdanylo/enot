@@ -30,7 +30,7 @@ const EN: Dict = {
 	"settings.refresh_fail": "Could not refresh access",
 	"settings.plans": "Plans",
 	"settings.plans_desc":
-		"Compare Lite / Plus / Pro — hours and what each pack is for — then checkout on Whop.",
+		"Compare Lite / Plus / Pro: hours and what each pack is for, then checkout on Whop.",
 	"settings.upgrade": "Upgrade",
 	"settings.whop": "Whop billing",
 	"settings.whop_desc": "Cancel or manage the active membership in Whop.",
@@ -65,7 +65,7 @@ const EN: Dict = {
 	"tos.cancel": "Cancel",
 	"delete.title": "Delete Enot account",
 	"delete.lead":
-		"This permanently deletes your cloud account, API key, jobs, and server-side vault mirror for this key. Whop memberships are not cancelled automatically — manage billing in Whop.",
+		"This permanently deletes your cloud account, API key, jobs, and server-side vault mirror for this key. Whop memberships are not cancelled automatically. Manage billing in Whop.",
 	"delete.vault": "Also delete vault notes created by Enot",
 	"delete.vault_list": "Will remove matching notes under:",
 	"delete.confirm": "Delete forever",
@@ -76,7 +76,7 @@ const EN: Dict = {
 	"notice.key_received": "Enot: key received",
 	"notice.register_fail": "Enot: registration failed",
 	"notice.vault_ready": "Enot: vault folders ready",
-	"notice.onboarded": "Enot: language saved — finishing setup…",
+	"notice.onboarded": "Enot: language saved. Finishing setup…",
 	"access.trial": "Trial: {days} day(s) left{hours}.",
 	"access.expired": "Trial ended. Voice notes pause until you subscribe.",
 	"access.paid": "Plan: {plan}{hours}.",
@@ -87,7 +87,7 @@ const EN: Dict = {
 const RU: Dict = {
 	"onboarding.title": "Добро пожаловать в Enot",
 	"onboarding.lead":
-		"Выбери язык интерфейса плагина. Имена папок в vault остаются на английском — так стабильнее синк.",
+		"Выбери язык интерфейса плагина. Имена папок в vault остаются на английском, так стабильнее синк.",
 	"onboarding.language": "Язык",
 	"onboarding.continue": "Продолжить",
 	"settings.account": "Аккаунт",
@@ -98,7 +98,7 @@ const RU: Dict = {
 	"settings.refresh_fail": "Не удалось обновить доступ",
 	"settings.plans": "Тарифы",
 	"settings.plans_desc":
-		"Сравни Lite / Plus / Pro — часы и для чего каждый пакет — затем оплата на Whop.",
+		"Сравни Lite / Plus / Pro: часы и для чего каждый пакет, затем оплата на Whop.",
 	"settings.upgrade": "Upgrade",
 	"settings.whop": "Биллинг Whop",
 	"settings.whop_desc": "Отменить или управлять подпиской в Whop.",
@@ -121,7 +121,7 @@ const RU: Dict = {
 	"settings.api_key": "API-ключ",
 	"settings.danger": "Опасная зона",
 	"settings.danger_desc":
-		"Удалить облачный аккаунт Enot и данные на сервере. Опционально — заметки, которые этот плагин создал в vault.",
+		"Удалить облачный аккаунт Enot и данные на сервере. Опционально: заметки, которые этот плагин создал в vault.",
 	"settings.delete_account": "Удалить аккаунт и данные на сервере",
 	"tos.title": "Условия и конфиденциальность",
 	"tos.lead":
@@ -144,7 +144,7 @@ const RU: Dict = {
 	"notice.key_received": "Enot: ключ получен",
 	"notice.register_fail": "Enot: регистрация не удалась",
 	"notice.vault_ready": "Enot: папки vault готовы",
-	"notice.onboarded": "Enot: язык сохранён — завершаем настройку…",
+	"notice.onboarded": "Enot: язык сохранён. Завершаем настройку…",
 	"access.trial": "Триал: осталось {days} дн.{hours}.",
 	"access.expired": "Триал закончился. Голосовые заметки на паузе до подписки.",
 	"access.paid": "План: {plan}{hours}.",

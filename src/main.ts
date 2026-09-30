@@ -168,7 +168,7 @@ const DEFAULT_PLAN_CARDS: PlanCard[] = [
 		price_usd: 79,
 		soft_hours: 160,
 		hard_hours: 180,
-		blurb: "Heavy month of calls — roughly a full work-month of audio.",
+		blurb: "Heavy month of calls: roughly a full work-month of audio.",
 		recommended: false,
 	},
 ];
@@ -1141,7 +1141,7 @@ export default class EnotPlugin extends Plugin {
 			new Notice(`Enot: ${daysLeft} trial day(s) left${hoursBit}`);
 			const level = this.entitlement.hours_level;
 			if (level === "soft" || level === "warn") {
-				new Notice("Enot: trial audio is almost used up — subscribe to keep going.", 10000);
+				new Notice("Enot: trial audio is almost used up. Subscribe to keep going.", 10000);
 			} else if (level === "hard") {
 				new Notice("Enot: trial audio limit reached. Subscribe to continue.", 12000);
 			}

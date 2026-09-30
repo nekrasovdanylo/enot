@@ -1,6 +1,6 @@
 # Privacy and disclosures (plugin)
 
-The Obsidian plugin is a thin Enot client. Cloud speech processing runs on your configured API host (default `https://enot.upl.one`).
+The Obsidian plugin is a thin Enot client. Cloud speech processing runs on your configured API host (default `enot.upl.one`).
 
 **Service legal documents (controller, retention, subprocessors):**
 

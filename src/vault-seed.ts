@@ -15,7 +15,7 @@ import {
 	TOPICS_DIR,
 } from "./graph";
 
-/** Draft welcome — replace with the founder's final English letter. */
+/** Draft welcome; replace with the founder's final English letter. */
 export const WELCOME_PATH = `${INBOX_DIR}/Welcome to Enot.md`;
 
 export const WELCOME_BODY_EN = `---
@@ -25,15 +25,15 @@ enot_welcome: true
 
 # Welcome to Enot
 
-Hi —
+Hi,
 
-Thanks for installing Enot. I built it so your voice and meetings become real notes in Obsidian — decisions, tasks, people — without copy-pasting from a transcript.
+Thanks for installing Enot. I built it so your voice and meetings become real notes in Obsidian: decisions, tasks, people, without copy-pasting from a transcript.
 
 Tap the raccoon on the left: **Microphone** to dictate, or **Upload file** for a recording you already have. Finished notes land in \`01 Meetings\` (and related folders). Open **Settings → Enot** anytime for language, plans, and name hints.
 
-If something feels off, reply from the product channels or email — I read them.
+If something feels off, reply from the product channels or email. I read them.
 
-— Danylo  
+Danylo  
 (replace this draft with your final letter)
 
 `;
@@ -75,7 +75,7 @@ Track commitments and deadlines from meetings.
 
 1. Enot auto-creates Agreement notes from meeting action items (owner + due).
 2. Edit \`due\`, \`owner\`, and \`status\` in the frontmatter anytime.
-3. \`_Timeline.md\` rebuilds automatically on inbox sync (Mermaid Gantt — preview mode).
+3. \`_Timeline.md\` rebuilds automatically on inbox sync (Mermaid Gantt in preview mode).
 
 Manual notes from \`07 Templates/Agreement.md\` are indexed the same way.
 `;
