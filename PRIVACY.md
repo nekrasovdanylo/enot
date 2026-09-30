@@ -1,6 +1,13 @@
-# Privacy and disclosures
+# Privacy and disclosures (plugin)
 
-The plugin is a thin Enot client. Cloud speech processing runs on your configured API host (default `https://enot.upl.one`). Whisper, prompts, diarization, OpenRouter keys, and billing secrets are **not** in this plugin.
+The Obsidian plugin is a thin Enot client. Cloud speech processing runs on your configured API host (default `https://enot.upl.one`).
+
+**Service legal documents (controller, retention, subprocessors):**
+
+- [Privacy Policy](https://enot.upl.one/legal/privacy)
+- [Terms of Service](https://enot.upl.one/legal/terms)
+
+Whisper, prompts, diarization, OpenRouter keys, and billing secrets are **not** shipped inside this plugin binary.
 
 ## Network
 
@@ -8,39 +15,25 @@ All calls use Obsidian `requestUrl` to your API base URL:
 
 | Path | Purpose |
 |------|---------|
-| `POST /v1/register` | Issue a personal API key |
+| `POST /v1/register` | Issue a personal API key (requires accepting Terms/Privacy) |
 | `GET /v1/me` | Trial / plan / hours / checkout links |
+| `DELETE /v1/me` | Delete cloud account and server-side data |
 | `POST /v1/me/settings` | Sync language and similar prefs |
 | `GET /v1/me/shortcut` | Download personal Apple Shortcut |
 | `POST /v1/process-audio` | Upload audio or video for processing |
 | `GET /v1/jobs`, `GET /v1/inbox`, `POST …/ack` | Poll and pull finished notes |
 | calibration / name-hints / brand-hints / clarify-queue | Glossaries and ASR clarify UI |
+| `GET /legal/privacy`, `GET /legal/terms` | Public legal documents |
 
-Checkout opens `checkout_url` / `checkout_urls` from `/v1/me` (Whop). No other third-party hosts are hard-coded.
+Checkout opens `checkout_url` / `checkout_urls` from `/v1/me` (Whop).
 
-## Audio and video
+## Audio and notes
 
-Media reaches the API in three ways:
-
-1. **In-plugin microphone** — record in Obsidian, then upload to `/v1/process-audio`.
-2. **In-plugin file picker** — choose a local audio/video file, upload to the same endpoint.
-3. **Apple Shortcut** (optional) — downloads from settings; the Shortcut posts audio with your key baked in.
-
-Audio bytes are sent only to your API URL. They are not written into the vault as media files; the plugin writes Markdown notes after the server finishes.
+Media is sent to your API URL for processing. Audio is not stored long-term as a media library; note text may exist on the server until the plugin acknowledges delivery, then job bodies are purged. Finished Markdown is written into your vault by the plugin.
 
 ## Vault
 
-Does not create empty `System/`. Creates parent folders only when writing:
-
-- Notes under `01 Meetings/`, `00 Inbox/`, `04 Resources/til/`, `05 Decisions/`
-- Temporary drafts under `01 Meetings/`
-- Stubs in `09 People/`, `10 Topics/`, `02 Projects/`
-
-The personal API key and settings live in plugin `data.json` inside the vault (not in the GitHub release).
-
-## Clipboard
-
-Optional Copy button for the API key.
+Creates parent folders only when writing notes. Optional Danger-zone wipe removes Enot-marked notes under PARA folders (see in-app confirmation list). The personal API key lives in plugin `data.json` inside the vault (not in the GitHub release).
 
 ## Pricing
 

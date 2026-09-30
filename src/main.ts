@@ -11,9 +11,12 @@ import {
 } from "obsidian";
 import {
 	ENOT_PATH_ROOTS,
+	INBOX_DIR,
 	MEETINGS_DIR,
 	PEOPLE_DIR,
 	PROJECTS_DIR,
+	RESOURCES_DIR,
+	DECISIONS_DIR,
 	TEMPLATES_DIR,
 	TOPICS_DIR,
 	AGREEMENTS_DIR,
@@ -36,6 +39,9 @@ import {
 	OnboardingModal,
 	VoiceCalibrationModal,
 	WriteTargetsModal,
+	TosAgreeModal,
+	DeleteAccountModal,
+	DeleteConfirmModal,
 	NAME_HINTS_INTRO,
 	BRAND_HINTS_INTRO,
 	CLARIFY_INTRO,
@@ -916,18 +922,183 @@ export default class EnotPlugin extends Plugin {
 	}
 
 	async ensureRegistered(): Promise<void> {
-		const res = await requestUrl({
-			url: `${this.apiBase()}/v1/register`,
-			method: "POST",
-			contentType: "application/json",
-			body: JSON.stringify({ install_id: this.settings.installId }),
+		const L = uiLang(this.settings);
+		const base = this.apiBase();
+		await new Promise<void>((resolve, reject) => {
+			let settled = false;
+			const modal = new TosAgreeModal(this.app, {
+				title: t(L, "tos.title"),
+				lead: t(L, "tos.lead"),
+				agreeLabel: t(L, "tos.agree"),
+				termsLabel: t(L, "tos.terms"),
+				privacyLabel: t(L, "tos.privacy"),
+				termsUrl: `${base}/legal/terms`,
+				privacyUrl: `${base}/legal/privacy`,
+				continueLabel: t(L, "tos.continue"),
+				cancelLabel: t(L, "tos.cancel"),
+				onAgree: async () => {
+					settled = true;
+					const res = await requestUrl({
+						url: `${this.apiBase()}/v1/register`,
+						method: "POST",
+						contentType: "application/json",
+						body: JSON.stringify({
+							install_id: this.settings.installId,
+							tos_accepted: true,
+						}),
+					});
+					const body = asRecord(res.json);
+					this.settings.apiKey = asString(body.api_key);
+					this.settings.userId = asString(body.user_id);
+					this.settings.installId = asString(body.install_id, this.settings.installId);
+					this.settings.endpoint = asString(body.endpoint, this.apiBase());
+					await this.saveSettings();
+					resolve();
+				},
+			});
+			const prevClose = modal.onClose.bind(modal);
+			modal.onClose = () => {
+				prevClose();
+				if (!settled) {
+					reject(new Error("tos_cancelled"));
+				}
+			};
+			modal.open();
 		});
-		const body = asRecord(res.json);
-		this.settings.apiKey = asString(body.api_key);
-		this.settings.userId = asString(body.user_id);
-		this.settings.installId = asString(body.install_id, this.settings.installId);
-		this.settings.endpoint = asString(body.endpoint, this.apiBase());
-		await this.saveSettings();
+	}
+
+	enotVaultWipePaths(): string[] {
+		return [
+			`${INBOX_DIR}/ (Enot capture notes)`,
+			`${MEETINGS_DIR}/ (Enot notes + _enot_processing_* drafts)`,
+			`${RESOURCES_DIR}/til/ (Enot TIL notes)`,
+			`${DECISIONS_DIR}/ (Enot decision notes)`,
+			`${PEOPLE_DIR}/, ${TOPICS_DIR}/, ${PROJECTS_DIR}/ (stubs with source: enot)`,
+			`${AGREEMENTS_DIR}/ (notes with enot_commitment: true; rebuild _Timeline.md)`,
+		];
+	}
+
+	async promptDeleteAccount(): Promise<void> {
+		const L = uiLang(this.settings);
+		const wipe = await new Promise<boolean | null>((resolve) => {
+			let chosen: boolean | null = null;
+			const modal = new DeleteAccountModal(this.app, {
+				title: t(L, "delete.title"),
+				lead: t(L, "delete.lead"),
+				vaultLabel: t(L, "delete.vault"),
+				vaultListLabel: t(L, "delete.vault_list"),
+				vaultPaths: this.enotVaultWipePaths(),
+				confirmLabel: t(L, "delete.confirm"),
+				cancelLabel: t(L, "tos.cancel"),
+				onContinue: (wipeVault) => {
+					chosen = wipeVault;
+				},
+			});
+			const prev = modal.onClose.bind(modal);
+			modal.onClose = () => {
+				prev();
+				resolve(chosen);
+			};
+			modal.open();
+		});
+		if (wipe === null) {
+			return;
+		}
+		await new Promise<void>((resolve) => {
+			let ran = false;
+			const modal = new DeleteConfirmModal(this.app, {
+				title: t(L, "delete.confirm2_title"),
+				lead: t(L, "delete.confirm2_lead"),
+				confirmLabel: t(L, "delete.confirm"),
+				cancelLabel: t(L, "tos.cancel"),
+				onConfirm: async () => {
+					ran = true;
+					await this.executeDeleteAccount(wipe);
+				},
+			});
+			const prev = modal.onClose.bind(modal);
+			modal.onClose = () => {
+				prev();
+				resolve();
+			};
+			modal.open();
+			void ran;
+		});
+	}
+
+	async executeDeleteAccount(wipeVault: boolean): Promise<void> {
+		const L = uiLang(this.settings);
+		if (!this.settings.apiKey) {
+			return;
+		}
+		try {
+			await requestUrl({
+				url: `${this.apiBase()}/v1/me`,
+				method: "DELETE",
+				headers: { "X-API-Key": this.settings.apiKey },
+			});
+			if (wipeVault) {
+				await this.wipeEnotVaultContent();
+			}
+			this.settings.apiKey = "";
+			this.settings.userId = "";
+			this.entitlement = null;
+			await this.saveSettings();
+			new Notice(t(L, "delete.done"));
+		} catch (err) {
+			console.warn("Enot: delete account failed", err);
+			new Notice(t(L, "delete.fail"));
+			throw err;
+		}
+	}
+
+	private async wipeEnotVaultContent(): Promise<void> {
+		const files = this.app.vault.getMarkdownFiles();
+		const captureRoots = [
+			`${INBOX_DIR}/`,
+			`${MEETINGS_DIR}/`,
+			`${RESOURCES_DIR}/til/`,
+			`${DECISIONS_DIR}/`,
+		];
+		const stubRoots = [`${PEOPLE_DIR}/`, `${TOPICS_DIR}/`, `${PROJECTS_DIR}/`];
+		for (const file of files) {
+			const path = file.path;
+			if (path.startsWith(`${MEETINGS_DIR}/_enot_processing_`)) {
+				await this.app.vault.trash(file, true);
+				continue;
+			}
+			let markdown = "";
+			try {
+				markdown = await this.app.vault.read(file);
+			} catch {
+				continue;
+			}
+			const front = parseFrontmatter(markdown);
+			const inCapture = captureRoots.some((r) => path.startsWith(r));
+			const inStub = stubRoots.some((r) => path.startsWith(r));
+			const inAgr = path.startsWith(`${AGREEMENTS_DIR}/`);
+			if (inCapture && (isEnotCapture(front) || /_enot_processing_/.test(path))) {
+				await this.app.vault.trash(file, true);
+				continue;
+			}
+			if (inStub && /source:\s*enot/i.test(front)) {
+				await this.app.vault.trash(file, true);
+				continue;
+			}
+			if (
+				inAgr &&
+				file.name !== "README.md" &&
+				file.name !== "_Timeline.md" &&
+				(/enot_commitment:\s*true/i.test(front) || /type:\s*agreement/i.test(front))
+			) {
+				await this.app.vault.trash(file, true);
+			}
+		}
+		try {
+			await this.rebuildAgreementsTimeline();
+		} catch {
+			/* ignore */
+		}
 	}
 
 	async refreshEntitlement(opts?: { quiet?: boolean }): Promise<void> {
@@ -2215,10 +2386,26 @@ class EnotSettingTab extends PluginSettingTab {
 							new Notice(t(uiLang(this.plugin.settings), "notice.key_received"));
 							this.display();
 						} catch (err) {
+							if (String(err).includes("tos_cancelled")) {
+								return;
+							}
 							new Notice(t(uiLang(this.plugin.settings), "notice.register_fail"));
 							console.error(err);
 						}
 					}),
+				);
+		} else {
+			new Setting(containerEl)
+				.setName(t(L, "settings.danger"))
+				.setDesc(t(L, "settings.danger_desc"))
+				.addButton((btn) =>
+					btn
+						.setButtonText(t(L, "settings.delete_account"))
+						.setWarning()
+						.onClick(async () => {
+							await this.plugin.promptDeleteAccount();
+							this.display();
+						}),
 				);
 		}
 

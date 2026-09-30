@@ -1022,3 +1022,189 @@ export class WriteTargetsModal extends Modal {
 		this.contentEl.empty();
 	}
 }
+
+export class TosAgreeModal extends Modal {
+	private agreed = false;
+
+	constructor(
+		app: App,
+		private opts: {
+			title: string;
+			lead: string;
+			agreeLabel: string;
+			termsLabel: string;
+			privacyLabel: string;
+			termsUrl: string;
+			privacyUrl: string;
+			continueLabel: string;
+			cancelLabel: string;
+			onAgree: () => void | Promise<void>;
+		},
+	) {
+		super(app);
+	}
+
+	onOpen(): void {
+		const { contentEl } = this;
+		contentEl.empty();
+		this.modalEl.addClass("enot-tos-modal");
+		contentEl.createEl("h2", { text: this.opts.title });
+		contentEl.createEl("p", { text: this.opts.lead, cls: "enot-modal-lead" });
+
+		const links = contentEl.createDiv({ cls: "enot-modal-links" });
+		const termsA = links.createEl("a", { text: this.opts.termsLabel, href: this.opts.termsUrl });
+		termsA.setAttr("target", "_blank");
+		links.createSpan({ text: " · " });
+		const privA = links.createEl("a", { text: this.opts.privacyLabel, href: this.opts.privacyUrl });
+		privA.setAttr("target", "_blank");
+
+		new Setting(contentEl).setName(this.opts.agreeLabel).addToggle((tog) => {
+			tog.setValue(false).onChange((on) => {
+				this.agreed = on;
+			});
+		});
+
+		const actions = contentEl.createDiv({ cls: "enot-modal-actions" });
+		new Setting(actions)
+			.addButton((btn) =>
+				btn
+					.setButtonText(this.opts.continueLabel)
+					.setCta()
+					.onClick(async () => {
+						if (!this.agreed) {
+							new Notice("Enot: please agree to Terms & Privacy first");
+							return;
+						}
+						btn.setDisabled(true);
+						try {
+							await this.opts.onAgree();
+							this.close();
+						} catch (err) {
+							console.error(err);
+							btn.setDisabled(false);
+							throw err;
+						}
+					}),
+			)
+			.addButton((btn) => btn.setButtonText(this.opts.cancelLabel).onClick(() => this.close()));
+	}
+
+	onClose(): void {
+		this.contentEl.empty();
+	}
+}
+
+export class DeleteAccountModal extends Modal {
+	private wipeVault = false;
+
+	constructor(
+		app: App,
+		private opts: {
+			title: string;
+			lead: string;
+			vaultLabel: string;
+			vaultListLabel: string;
+			vaultPaths: string[];
+			confirmLabel: string;
+			cancelLabel: string;
+			onContinue: (wipeVault: boolean) => void;
+		},
+	) {
+		super(app);
+	}
+
+	onOpen(): void {
+		const { contentEl } = this;
+		contentEl.empty();
+		this.modalEl.addClass("enot-delete-modal");
+		contentEl.createEl("h2", { text: this.opts.title });
+		contentEl.createEl("p", { text: this.opts.lead, cls: "enot-modal-lead" });
+
+		contentEl.createEl("p", { text: this.opts.vaultListLabel, cls: "setting-item-description" });
+		const list = contentEl.createEl("ul", { cls: "enot-delete-paths" });
+		list.style.display = "none";
+		for (const p of this.opts.vaultPaths) {
+			list.createEl("li", { text: p });
+		}
+
+		new Setting(contentEl).setName(this.opts.vaultLabel).addToggle((tog) => {
+			tog.setValue(false).onChange((on) => {
+				this.wipeVault = on;
+				list.style.display = on ? "" : "none";
+			});
+		});
+
+		const actions = contentEl.createDiv({ cls: "enot-modal-actions" });
+		new Setting(actions)
+			.addButton((btn) =>
+				btn
+					.setButtonText(this.opts.confirmLabel)
+					.setWarning()
+					.onClick(() => {
+						this.opts.onContinue(this.wipeVault);
+						this.close();
+					}),
+			)
+			.addButton((btn) => btn.setButtonText(this.opts.cancelLabel).onClick(() => this.close()));
+	}
+
+	onClose(): void {
+		this.contentEl.empty();
+	}
+}
+
+export class DeleteConfirmModal extends Modal {
+	private typed = "";
+
+	constructor(
+		app: App,
+		private opts: {
+			title: string;
+			lead: string;
+			confirmLabel: string;
+			cancelLabel: string;
+			onConfirm: () => void | Promise<void>;
+		},
+	) {
+		super(app);
+	}
+
+	onOpen(): void {
+		const { contentEl } = this;
+		contentEl.empty();
+		contentEl.createEl("h2", { text: this.opts.title });
+		contentEl.createEl("p", { text: this.opts.lead, cls: "enot-modal-lead" });
+		new Setting(contentEl).setName("DELETE").addText((tx) => {
+			tx.setPlaceholder("DELETE").onChange((v) => {
+				this.typed = v.trim();
+			});
+		});
+		const actions = contentEl.createDiv({ cls: "enot-modal-actions" });
+		new Setting(actions)
+			.addButton((btn) =>
+				btn
+					.setButtonText(this.opts.confirmLabel)
+					.setWarning()
+					.onClick(async () => {
+						if (this.typed !== "DELETE") {
+							new Notice("Enot: type DELETE to confirm");
+							return;
+						}
+						btn.setDisabled(true);
+						try {
+							await this.opts.onConfirm();
+							this.close();
+						} catch (err) {
+							console.error(err);
+							btn.setDisabled(false);
+							throw err;
+						}
+					}),
+			)
+			.addButton((btn) => btn.setButtonText(this.opts.cancelLabel).onClick(() => this.close()));
+	}
+
+	onClose(): void {
+		this.contentEl.empty();
+	}
+}
