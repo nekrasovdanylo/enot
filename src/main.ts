@@ -61,6 +61,8 @@ import {
 
 const LEGACY_AUTH_FILE = "System/enot.json";
 const DEFAULT_API = "https://enot.upl.one";
+/** Survives plugin uninstall/reinstall inside the same vault (anti trial-reset). */
+const DEVICE_FILE = ".obsidian/enot-device.json";
 const POLL_MS = 15000;
 const UNSAFE_FILE = /[\\/:*?"<>|#[\]]+/g;
 
@@ -634,10 +636,7 @@ export default class EnotPlugin extends Plugin {
 		try {
 			await this.hydrateFromVault();
 			await this.removeEmptyLegacySystem();
-			if (!this.settings.installId) {
-				this.settings.installId = newInstallId();
-				await this.saveSettings();
-			}
+			await this.ensurePersistentInstallId();
 		} catch (err) {
 			console.error("Enot boot failed", err);
 			new Notice(`Enot: vault setup failed - ${errMessage(err)}`);
@@ -653,6 +652,42 @@ export default class EnotPlugin extends Plugin {
 		} catch (err) {
 			console.error("Enot register failed", err);
 			new Notice(t(uiLang(this.settings), "notice.register_fail"));
+		}
+	}
+
+	/** Keep install_id across plugin wipe via vault `.obsidian/enot-device.json`. */
+	async ensurePersistentInstallId(): Promise<void> {
+		let fromDisk = "";
+		try {
+			if (await this.app.vault.adapter.exists(DEVICE_FILE)) {
+				const raw = await this.app.vault.adapter.read(DEVICE_FILE);
+				fromDisk = asString(asRecord(JSON.parse(raw)).install_id).trim();
+			}
+		} catch (err) {
+			console.warn("Enot: read device id failed", err);
+		}
+
+		if (!this.settings.installId && fromDisk) {
+			this.settings.installId = fromDisk;
+			await this.saveSettings();
+		}
+		if (!this.settings.installId) {
+			this.settings.installId = newInstallId();
+			await this.saveSettings();
+		}
+		if (fromDisk !== this.settings.installId) {
+			try {
+				const parent = DEVICE_FILE.split("/").slice(0, -1).join("/");
+				if (parent && !(await this.app.vault.adapter.exists(parent))) {
+					await this.app.vault.adapter.mkdir(parent);
+				}
+				await this.app.vault.adapter.write(
+					DEVICE_FILE,
+					JSON.stringify({ install_id: this.settings.installId }, null, 2),
+				);
+			} catch (err) {
+				console.warn("Enot: persist device id failed", err);
+			}
 		}
 	}
 
