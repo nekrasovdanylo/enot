@@ -264,11 +264,24 @@ export class VoiceCalibrationModal extends Modal {
 		const { contentEl } = this;
 		contentEl.empty();
 		this.modalEl.addClass("enot-table-modal");
+		this.modalEl.addClass("enot-voice-modal");
 		contentEl.createEl("h2", { text: "Unknown voices" });
 		contentEl.createEl("p", {
 			text: "Name the speaker, then Save & sync. Preview plays a short clip when available.",
 			cls: "enot-modal-lead",
 		});
+
+		// Keep Save above the list so mobile keyboard does not cover the main CTA.
+		const actions = contentEl.createDiv({ cls: "enot-modal-actions enot-modal-actions--top" });
+		new Setting(actions)
+			.addButton((btn) =>
+				btn.setButtonText("Save & sync").setCta().onClick(async () => {
+					await this.saveAndSync();
+				}),
+			)
+			.addButton((btn) =>
+				btn.setButtonText("Close").onClick(() => this.close()),
+			);
 
 		this.listEl = contentEl.createDiv({ cls: "enot-voice-list" });
 		try {
@@ -282,17 +295,6 @@ export class VoiceCalibrationModal extends Modal {
 			this.clipIds = new Set();
 		}
 		this.renderRows();
-
-		const actions = contentEl.createDiv({ cls: "enot-modal-actions" });
-		new Setting(actions)
-			.addButton((btn) =>
-				btn.setButtonText("Save & sync").setCta().onClick(async () => {
-					await this.saveAndSync();
-				}),
-			)
-			.addButton((btn) =>
-				btn.setButtonText("Close").onClick(() => this.close()),
-			);
 	}
 
 	private renderRows(): void {
@@ -381,7 +383,23 @@ export class VoiceCalibrationModal extends Modal {
 				type: "text",
 				cls: "enot-table-input",
 				value: isUnknownSpeakerName(row.name) ? "" : row.name,
-				attr: { placeholder: "e.g. Света" },
+				attr: {
+					placeholder: "e.g. Света",
+					enterkeyhint: "done",
+					autocomplete: "off",
+					autocapitalize: "words",
+				},
+			});
+			nameInput.addEventListener("focus", () => {
+				window.setTimeout(() => {
+					nameInput.scrollIntoView({ block: "center", behavior: "smooth" });
+				}, 280);
+			});
+			nameInput.addEventListener("keydown", (ev) => {
+				if (ev.key === "Enter") {
+					ev.preventDefault();
+					nameInput.blur();
+				}
 			});
 			nameInput.addEventListener("input", () => {
 				const target = this.rows[index];
@@ -942,7 +960,7 @@ export class PlansModal extends Modal {
 			price.createSpan({ cls: "enot-plan-card__per", text: "/ mo" });
 			card.createDiv({
 				cls: "enot-plan-card__hours",
-				text: `Up to ~${plan.soft_hours} h / month (hard stop ~${plan.hard_hours} h)`,
+				text: `Up to ${plan.hard_hours} h / month`,
 			});
 			card.createEl("p", { cls: "enot-plan-card__blurb", text: plan.blurb });
 			const btn = card.createEl("button", {

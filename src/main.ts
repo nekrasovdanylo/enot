@@ -622,20 +622,6 @@ export default class EnotPlugin extends Plugin {
 			},
 		});
 		this.addCommand({
-			id: "download-shortcut-phone",
-			name: "Download capture shortcut (iPhone)",
-			callback: async () => {
-				await this.downloadShortcut("phone");
-			},
-		});
-		this.addCommand({
-			id: "download-shortcut-mac",
-			name: "Download capture shortcut (Mac)",
-			callback: async () => {
-				await this.downloadShortcut("mac");
-			},
-		});
-		this.addCommand({
 			id: "upload-media",
 			name: "Upload audio or video",
 			callback: () => {
@@ -2123,46 +2109,6 @@ export default class EnotPlugin extends Plugin {
 		}
 	}
 
-	async downloadShortcut(variant: "phone" | "mac"): Promise<void> {
-		if (!this.settings.apiKey) {
-			new Notice("Enot: no API key");
-			return;
-		}
-		try {
-			const res = await requestUrl({
-				url: `${this.apiBase()}/v1/me/shortcut?variant=${variant}`,
-				method: "GET",
-				headers: { "X-API-Key": this.settings.apiKey },
-			});
-			const bytes = res.arrayBuffer;
-			const name =
-				variant === "phone" ? "Enot Capture iPhone.shortcut" : "Enot Capture Mac.shortcut";
-			// Desktop: write to user Downloads via Node fs when available
-			const nodeRequire = (window as unknown as { require?: (m: string) => unknown }).require;
-			const fs = nodeRequire?.("fs") as
-				| { writeFileSync: (path: string, data: Uint8Array) => void }
-				| undefined;
-			const os = nodeRequire?.("os") as { homedir: () => string } | undefined;
-			const pathMod = nodeRequire?.("path") as { join: (...parts: string[]) => string } | undefined;
-			if (fs && os && pathMod) {
-				const dest = pathMod.join(os.homedir(), "Downloads", name);
-				fs.writeFileSync(dest, new Uint8Array(bytes));
-				new Notice(
-					`Enot: saved ${dest}. Open it in Shortcuts (allow Untrusted Shortcuts once).`,
-					10000,
-				);
-				return;
-			}
-			// Fallback: copy base64 notice
-			const b64 = btoa(String.fromCharCode(...new Uint8Array(bytes)));
-			await navigator.clipboard.writeText(b64);
-			new Notice("Enot: shortcut bytes copied as base64 - use desktop Obsidian to save the file.", 8000);
-		} catch (err) {
-			console.error(err);
-			new Notice(`Enot: shortcut download failed - ${errMessage(err)}`);
-		}
-	}
-
 	private async mergePeopleIntoNameHints(people: string[]): Promise<void> {
 		if (!people.length || !this.settings.apiKey) {
 			return;
@@ -2486,20 +2432,6 @@ class EnotSettingTab extends PluginSettingTab {
 			.addButton((btn) =>
 				btn.setButtonText("Open").setCta().onClick(() => {
 					this.plugin.openVoiceCalibrationTable();
-				}),
-			);
-
-		new Setting(containerEl)
-			.setName(t(L, "settings.shortcut"))
-			.setDesc("Personal Apple Shortcut for capture outside Obsidian.")
-			.addButton((btn) =>
-				btn.setButtonText("iPhone").onClick(() => {
-					void this.plugin.downloadShortcut("phone");
-				}),
-			)
-			.addButton((btn) =>
-				btn.setButtonText("Mac").onClick(() => {
-					void this.plugin.downloadShortcut("mac");
 				}),
 			);
 
